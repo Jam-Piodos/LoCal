@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="initial-scale=1.0">
-  <title>UTM to GPS with Map</title>
+  <title>UTM to GPS - Manolo Fortich</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
@@ -53,8 +53,19 @@
   <div id="map"></div>
 
   <script>
-    // Create map centered on Manolo Fortich by default
-    var map = L.map('map').setView([8.3692, 124.8646], 13);
+    // Approximate bounds for Manolo Fortich (lat/lon box)
+    var manoloBounds = [
+      [8.28, 124.77], // Southwest
+      [8.47, 124.95]  // Northeast
+    ];
+
+    // Create map centered on Manolo Fortich with bounds
+    var map = L.map('map', {
+      maxBounds: manoloBounds, // restrict view
+      maxBoundsViscosity: 1.0, // lock to bounds
+      minZoom: 12,
+      maxZoom: 18
+    }).setView([8.3692, 124.8646], 13);
 
     // Satellite basemap
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
@@ -80,6 +91,15 @@
 
       // Convert UTM → Lat/Lon
       const [lon, lat] = proj4(utmProj, 'WGS84', [easting, northing]);
+
+      // Check if inside Manolo bounds
+      if (
+        lat < manoloBounds[0][0] || lat > manoloBounds[1][0] ||
+        lon < manoloBounds[0][1] || lon > manoloBounds[1][1]
+      ) {
+        alert("The converted point is outside Manolo Fortich bounds!");
+        return;
+      }
 
       // Center map on result
       map.setView([lat, lon], 16);
