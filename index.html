@@ -107,12 +107,18 @@
       document.getElementById('result').innerText =
         `Latitude: ${lat.toFixed(6)}, Longitude: ${lon.toFixed(6)}`;
 
-      // Plot on map
+      // Plot circle marker instead of default pin
       if (marker) {
         marker.setLatLng([lat, lon]);
       } else {
-        marker = L.marker([lat, lon]).addTo(map);
+        marker = L.circleMarker([lat, lon], {
+          radius: 8,
+          color: "#ff0000",
+          fillColor: "#ff0000",
+          fillOpacity: 0.8
+        }).addTo(map);
       }
+
       map.setView([lat, lon], 18);
     }
   </script>
