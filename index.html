@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>UTM to GPS Converter with Map</title>
+  <title>UTM to GPS Converter with Map (Local Grid Adjustment)</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -16,7 +16,6 @@
       margin: 0;
       padding: 20px;
     }
-
     .container {
       background: #ffffff;
       padding: 30px 40px;
@@ -26,51 +25,6 @@
       text-align: center;
       margin-bottom: 20px;
     }
-
-    h2 {
-      margin-bottom: 25px;
-      color: #333333;
-    }
-
-    label {
-      display: block;
-      text-align: left;
-      margin-bottom: 5px;
-      font-weight: bold;
-      color: #555555;
-    }
-
-    input, select {
-      width: 100%;
-      padding: 10px;
-      margin-bottom: 20px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-      font-size: 16px;
-    }
-
-    button {
-      background: #4CAF50;
-      color: white;
-      border: none;
-      padding: 12px 20px;
-      font-size: 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.3s ease;
-    }
-
-    button:hover {
-      background: #45a049;
-    }
-
-    #result {
-      margin-top: 20px;
-      font-size: 16px;
-      color: #333333;
-      font-weight: bold;
-    }
-
     #map {
       width: 100%;
       height: 400px;
@@ -81,24 +35,15 @@
 </head>
 <body>
   <div class="container">
-    <h2>UTM to Latitude/Longitude Converter</h2>
+    <h2>Local Survey Grid → GPS</h2>
     <form id="utmForm">
-      <label>Easting (meters):</label>
+      <label>Local Easting (m):</label>
       <input type="number" id="easting" required>
 
-      <label>Northing (meters):</label>
+      <label>Local Northing (m):</label>
       <input type="number" id="northing" required>
 
-      <label>UTM Zone:</label>
-      <input type="number" id="zone" min="1" max="60" value="51" required>
-
-      <label>Hemisphere:</label>
-      <select id="hemisphere">
-        <option value="N">Northern</option>
-        <option value="S">Southern</option>
-      </select>
-
-      <button type="button" onclick="convertUTM()">Convert</button>
+      <button type="button" onclick="convertLocal()">Convert</button>
     </form>
 
     <p id="result">Latitude: - , Longitude: -</p>
@@ -107,44 +52,59 @@
   <div id="map"></div>
 
   <script>
-    // Initialize the map (center on Philippines by default)
-    const map = L.map('map').setView([8.5, 125], 6);
-
+    // Initialize map
+    const map = L.map('map').setView([8.5, 125], 7);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
     let marker;
 
-    function convertUTM() {
-      const easting = parseFloat(document.getElementById('easting').value);
-      const northing = parseFloat(document.getElementById('northing').value);
-      const zone = parseInt(document.getElementById('zone').value);
-      const hemisphere = document.getElementById('hemisphere').value;
+    // === CONFIG: Update this with real BLMM tie point coordinates ===
+    const tiePointUTM = {
+      easting: 700000,   // Replace with BLMM 1 Easting (UTM Zone 51N)
+      northing: 950000,  // Replace with BLMM 1 Northing (UTM Zone 51N)
+      zone: 51,
+      hemisphere: 'N'
+    };
 
-      if (isNaN(easting) || isNaN(northing) || isNaN(zone)) {
-        alert("Please enter valid numbers for Easting, Northing, and Zone.");
+    // === CONFIG: Local offsets of BLMM 1 in survey system (from VIDAS37 plan) ===
+    const tiePointLocal = {
+      easting: 20000,   // Example from survey sheet
+      northing: 23000  // Example from survey sheet
+    };
+
+    function convertLocal() {
+      const localE = parseFloat(document.getElementById('easting').value);
+      const localN = parseFloat(document.getElementById('northing').value);
+
+      if (isNaN(localE) || isNaN(localN)) {
+        alert("Enter valid local coordinates.");
         return;
       }
 
-      let utmProj = `+proj=utm +zone=${zone} +datum=WGS84`;
-      if (hemisphere === 'S') utmProj += " +south";
+      // Adjust to true UTM using tie point
+      const globalE = tiePointUTM.easting + (localE - tiePointLocal.easting);
+      const globalN = tiePointUTM.northing + (localN - tiePointLocal.northing);
 
-      const [lon, lat] = proj4(utmProj, 'WGS84', [easting, northing]);
+      // Build UTM projection
+      let utmProj = `+proj=utm +zone=${tiePointUTM.zone} +datum=WGS84`;
+      if (tiePointUTM.hemisphere === 'S') utmProj += " +south";
 
-      // Update result
-      document.getElementById('result').innerText = 
+      // Convert to lat/lon
+      const [lon, lat] = proj4(utmProj, 'WGS84', [globalE, globalN]);
+
+      // Show result
+      document.getElementById('result').innerText =
         `Latitude: ${lat.toFixed(6)}, Longitude: ${lon.toFixed(6)}`;
 
-      // Add/Update marker on map
+      // Plot on map
       if (marker) {
         marker.setLatLng([lat, lon]);
       } else {
         marker = L.marker([lat, lon]).addTo(map);
       }
-
-      // Center map on the new point
-      map.setView([lat, lon], 16);
+      map.setView([lat, lon], 17);
     }
   </script>
 </body>
