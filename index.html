@@ -1,112 +1,202 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="initial-scale=1.0">
-  <title>Project Kalasan - Lot Plotter</title>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="initial-scale=1.0"/>
+  <title>Affine-align Local Survey → GPS (Lot 4 corners)</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.1/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.3.1/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <style>
-    #map { height: 100vh; width: 100%; }
+    body { margin:0; font-family: Arial, sans-serif; }
+    #map { width:100%; height:78vh; }
+    .panel { padding:10px; background:#f7f9fb; border-top:1px solid #ddd; }
+    .panel .small { color:#444; font-size:13px; }
+    .res { font-family:monospace; white-space:pre; }
   </style>
 </head>
 <body>
-  <div id="map"></div>
 
-  <script>
-    // === Local survey coordinates (exclude tie line) ===
-    const localCoords = [
-      { id: 1, northing: 23425.240, easting: 23198.620 },
-      { id: 2, northing: 23111.940, easting: 23519.570 },
-      { id: 3, northing: 23064.430, easting: 23301.590 },
-      { id: 4, northing: 23203.940, easting: 23018.230 }
-    ];
+<div id="map"></div>
+<div class="panel">
+  <div class="small">Affine fit residuals (lat, lon) — RMS and per-point error (meters approx):</div>
+  <div id="info" class="res"></div>
+</div>
 
-    // === Known GPS control points (matching the survey points) ===
-    const gpsCoords = [
-      { id: 1, lat: 8.398673, lng: 124.894305 },
-      { id: 2, lat: 8.398230, lng: 124.895121 },
-      { id: 3, lat: 8.397676, lng: 124.894605 },
-      { id: 4, lat: 8.398102, lng: 124.893790 }
-    ];
+<script>
+/*
+  1) Replace localPoints with your local Easting/Northing (meters) in order 1->2->3->4.
+  2) gpsPoints are the target GPS you supplied for points 1..4.
+  3) The script computes affine parameters mapping local->(lat,lon).
+  4) It applies the transform to local points, plots polygon and markers, and shows residuals.
+*/
 
-    // --- Helper: compute similarity transform (Helmert) ---
-    function computeSimilarity(local, gps) {
-      const n = local.length;
-      let sumX = 0, sumY = 0, sumU = 0, sumV = 0;
-      for (let i = 0; i < n; i++) {
-        sumX += local[i].easting;
-        sumY += local[i].northing;
-        sumU += gps[i].lng;
-        sumV += gps[i].lat;
+// --- Local survey points (Easting, Northing) in same order as GPS points 1..4
+// IMPORTANT: keep ordering consistent with gpsPoints below
+const localPoints = [
+  { id: 1, E: 23198.620, N: 23425.240 }, // local point 1
+  { id: 2, E: 23519.570, N: 23111.940 }, // local point 2
+  { id: 3, E: 23301.590, N: 23064.430 }, // local point 3
+  { id: 4, E: 23018.230, N: 23203.940 }  // local point 4
+];
+
+// --- GPS targets you provided (lat, lon) for points 1..4
+const gpsPoints = [
+  { id:1, lat: 8.398673, lon: 124.894305 },
+  { id:2, lat: 8.398230, lon: 124.895121 },
+  { id:3, lat: 8.397676, lon: 124.894605 },
+  { id:4, lat: 8.398102, lon: 124.893790 }
+];
+
+// ---- Build linear system for affine: lat = a*E + b*N + c ; lon = d*E + e*N + f
+// We'll solve for vector x = [a b c d e f] using least squares (AtA x = At b)
+function solveAffine(localPts, gpsPts) {
+  // Build matrices A (8x6) and b (8x1): two equations per point (lat and lon)
+  // For each point: [E N 1 0 0 0] * x = lat ; [0 0 0 E N 1] * x = lon
+  const rows = localPts.length * 2;
+  const cols = 6;
+  // initialize AtA (6x6) and Atb (6x1) to zero
+  let AtA = Array.from({length:cols}, ()=>Array(cols).fill(0));
+  let Atb = Array(cols).fill(0);
+
+  for (let i=0; i<localPts.length; i++) {
+    const E = localPts[i].E;
+    const N = localPts[i].N;
+    const lat = gpsPts[i].lat;
+    const lon = gpsPts[i].lon;
+
+    // row1 = [E N 1 0 0 0], b1 = lat
+    const r1 = [E, N, 1, 0, 0, 0];
+    // row2 = [0 0 0 E N 1], b2 = lon
+    const r2 = [0,0,0,E, N, 1];
+
+    // Accumulate AtA += r^T * r ; Atb += r^T * b
+    for (let p=0;p<cols;p++){
+      for (let q=0;q<cols;q++){
+        AtA[p][q] += r1[p]*r1[q] + r2[p]*r2[q];
       }
-
-      const meanX = sumX / n, meanY = sumY / n;
-      const meanU = sumU / n, meanV = sumV / n;
-
-      let Suv = 0, Suw = 0, Svw = 0, Svv = 0;
-      for (let i = 0; i < n; i++) {
-        const x = local[i].easting - meanX;
-        const y = local[i].northing - meanY;
-        const u = gps[i].lng - meanU;
-        const v = gps[i].lat - meanV;
-        Suv += u*x + v*y;
-        Suw += u*y - v*x;
-        Svv += u*u + v*v;
-      }
-
-      const s = Math.sqrt((Suv*Suv + Suw*Suw) / ( (local.reduce((a,c)=>a+(c.easting-meanX)**2+(c.northing-meanY)**2,0)) ));
-      const cosTheta = Suv / (s * (local.reduce((a,c)=>a+(c.easting-meanX)**2+(c.northing-meanY)**2,0)));
-      const sinTheta = Suw / (s * (local.reduce((a,c)=>a+(c.easting-meanX)**2+(c.northing-meanY)**2,0)));
-
-      return { meanX, meanY, meanU, meanV, s, cosTheta, sinTheta };
+      Atb[p] += r1[p]*lat + r2[p]*lon;
     }
+  }
 
-    // --- Transform function ---
-    function applySimilarity(pt, params) {
-      const dx = pt.easting - params.meanX;
-      const dy = pt.northing - params.meanY;
-      const lng = params.meanU + params.s * (params.cosTheta*dx - params.sinTheta*dy);
-      const lat = params.meanV + params.s * (params.sinTheta*dx + params.cosTheta*dy);
-      return [lat, lng];
+  // Solve linear system AtA * x = Atb via Gaussian elimination (6x6)
+  // convert to augmented matrix
+  let M = AtA.map((row,i) => row.concat([Atb[i]]));
+
+  // Gaussian elimination
+  const n = M.length;
+  for (let i=0;i<n;i++){
+    // pivot
+    let maxRow = i;
+    for (let k=i+1;k<n;k++){
+      if (Math.abs(M[k][i]) > Math.abs(M[maxRow][i])) maxRow = k;
     }
+    // swap
+    [M[i], M[maxRow]] = [M[maxRow], M[i]];
+    // singular?
+    if (Math.abs(M[i][i]) < 1e-12) throw new Error("Singular system (points maybe collinear)");
+    // normalize
+    const piv = M[i][i];
+    for (let j=i;j<=n;j++) M[i][j] /= piv;
+    // eliminate
+    for (let r=0;r<n;r++){
+      if (r===i) continue;
+      const factor = M[r][i];
+      for (let c=i;c<=n;c++) M[r][c] -= factor*M[i][c];
+    }
+  }
+  // solution
+  const x = M.map(row => row[n]);
+  return x; // [a,b,c,d,e,f]
+}
 
-    // Compute similarity params
-    const params = computeSimilarity(localCoords, gpsCoords);
+// apply affine to local point -> [lat, lon]
+function applyAffine(x, E, N) {
+  const a = x[0], b = x[1], c = x[2], d = x[3], e = x[4], f = x[5];
+  const lat = a*E + b*N + c;
+  const lon = d*E + e*N + f;
+  return { lat, lon };
+}
 
-    // Transform all survey points
-    const lotPoints = localCoords.map(pt => applySimilarity(pt, params));
+// compute transform
+let affineX;
+try {
+  affineX = solveAffine(localPoints, gpsPoints);
+} catch (err) {
+  alert("Affine solve failed: " + err.message);
+  throw err;
+}
 
-    // === Initialize Map ===
-    const map = L.map('map').setView([gpsCoords[0].lat, gpsCoords[0].lng], 18);
+// apply transform to localPoints (and compute residuals)
+const transformed = [];
+let sumSq = 0;
+const metersPerDegLat = 111320; // rough
+const meanLat = gpsPoints.reduce((s,p)=>s+p.lat,0)/gpsPoints.length;
+const metersPerDegLon = 111320 * Math.cos(meanLat*Math.PI/180);
 
-    // Satellite basemap
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      attribution: 'Tiles © Esri'
-    }).addTo(map);
+let infoText = "";
+for (let i=0;i<localPoints.length;i++){
+  const pt = localPoints[i];
+  const got = applyAffine(affineX, pt.E, pt.N);
+  transformed.push(got);
+  // residual in degrees
+  const dLat = got.lat - gpsPoints[i].lat;
+  const dLon = got.lon - gpsPoints[i].lon;
+  // residual in meters approx
+  const resMeters = Math.hypot(dLat*metersPerDegLat, dLon*metersPerDegLon);
+  sumSq += resMeters*resMeters;
+  infoText += `P${pt.id}: target(${gpsPoints[i].lat.toFixed(6)}, ${gpsPoints[i].lon.toFixed(6)}) → transformed(${got.lat.toFixed(6)}, ${got.lon.toFixed(6)})  error ≈ ${resMeters.toFixed(2)} m\n`;
+}
+const rms = Math.sqrt(sumSq / localPoints.length);
+infoText += `\nRMS error ≈ ${rms.toFixed(2)} m\n\nAffine parameters:\n`;
+infoText += `a=${affineX[0].toExponential(6)}, b=${affineX[1].toExponential(6)}, c=${affineX[2].toExponential(6)}\n`;
+infoText += `d=${affineX[3].toExponential(6)}, e=${affineX[4].toExponential(6)}, f=${affineX[5].toExponential(6)}\n`;
 
-    // Draw polygon
-    L.polygon(lotPoints, { color: 'orange' }).addTo(map).bindPopup("Lot Boundary");
+document.getElementById('info').innerText = infoText;
 
-    // Add transformed points (blue)
-    lotPoints.forEach((pt, i) => {
-      L.circleMarker(pt, { radius: 6, color: 'blue', fillColor: 'cyan', fillOpacity: 0.8 })
-        .addTo(map)
-        .bindPopup("Transformed Point " + (i+1));
-    });
+// --- Initialize map centered near average of transformed points ---
+const avgLat = transformed.reduce((s,p)=>s+p.lat,0)/transformed.length;
+const avgLon = transformed.reduce((s,p)=>s+p.lon,0)/transformed.length;
 
-    // Add control GPS points (green)
-    gpsCoords.forEach((pt, i) => {
-      L.circleMarker([pt.lat, pt.lng], { radius: 6, color: 'green', fillColor: 'lime', fillOpacity: 0.8 })
-        .addTo(map)
-        .bindPopup("Control Point " + (i+1));
-    });
+const map = L.map('map', {
+  minZoom: 14,
+  maxZoom: 19
+}).setView([avgLat, avgLon], 16);
 
-    // Fit map to polygon
-    map.fitBounds(lotPoints);
-  </script>
+// Satellite basemap
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Tiles © Esri'
+}).addTo(map);
+
+// show the target gps points (green) and transformed local (blue)
+const targetLayer = L.layerGroup().addTo(map);
+const transLayer = L.layerGroup().addTo(map);
+
+// polygon from transformed points (close polygon)
+const polyCoords = transformed.map(p => [p.lat, p.lon]);
+polyCoords.push(polyCoords[0]); // close
+
+// polygon style
+L.polygon(polyCoords, { color: 'orange', weight: 2, fillOpacity: 0.15 }).addTo(map).bindPopup("Transformed Lot");
+
+// Add transformed markers
+for (let i=0;i<transformed.length;i++){
+  L.circleMarker([transformed[i].lat, transformed[i].lon], {
+    radius:6, color:'#1f78b4', fillColor:'#1f78b4', fillOpacity:0.9
+  }).addTo(transLayer).bindPopup(`Trans P${localPoints[i].id}`);
+}
+
+// Add target GPS markers for comparison
+for (let i=0;i<gpsPoints.length;i++){
+  L.circleMarker([gpsPoints[i].lat, gpsPoints[i].lon], {
+    radius:6, color:'#33a02c', fillColor:'#a6f0a6', fillOpacity:0.9
+  }).addTo(targetLayer).bindPopup(`Target P${gpsPoints[i].id}`);
+}
+
+// Fit view to polygon
+map.fitBounds(polyCoords);
+
+</script>
 </body>
 </html>
-
