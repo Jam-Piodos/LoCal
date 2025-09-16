@@ -4,30 +4,95 @@
     <meta charset="UTF-8">
     <title>UTM to GPS Converter</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f2f6fc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: #ffffff;
+            padding: 30px 40px;
+            border-radius: 12px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.1);
+            width: 350px;
+            text-align: center;
+        }
+
+        h2 {
+            margin-bottom: 25px;
+            color: #333333;
+        }
+
+        label {
+            display: block;
+            text-align: left;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555555;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+        }
+
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        #result {
+            margin-top: 20px;
+            font-size: 16px;
+            color: #333333;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-    <h2>UTM to Latitude/Longitude Converter</h2>
-    <form id="utmForm">
-        <label>Easting (meters): </label>
-        <input type="number" id="easting" required><br><br>
+    <div class="container">
+        <h2>UTM to Latitude/Longitude Converter</h2>
+        <form id="utmForm">
+            <label>Easting (meters):</label>
+            <input type="number" id="easting" required>
 
-        <label>Northing (meters): </label>
-        <input type="number" id="northing" required><br><br>
+            <label>Northing (meters):</label>
+            <input type="number" id="northing" required>
 
-        <label>UTM Zone: </label>
-        <input type="number" id="zone" min="1" max="60" required><br><br>
+            <label>UTM Zone:</label>
+            <input type="number" id="zone" min="1" max="60" required>
 
-        <label>Hemisphere: </label>
-        <select id="hemisphere">
-            <option value="N">Northern</option>
-            <option value="S">Southern</option>
-        </select><br><br>
+            <label>Hemisphere:</label>
+            <select id="hemisphere">
+                <option value="N">Northern</option>
+                <option value="S">Southern</option>
+            </select>
 
-        <button type="button" onclick="convertUTM()">Convert</button>
-    </form>
+            <button type="button" onclick="convertUTM()">Convert</button>
+        </form>
 
-    <h3>Result:</h3>
-    <p id="result">Latitude: - , Longitude: -</p>
+        <p id="result">Latitude: - , Longitude: -</p>
+    </div>
 
     <script>
         function convertUTM() {
@@ -36,14 +101,11 @@
             const zone = parseInt(document.getElementById('zone').value);
             const hemisphere = document.getElementById('hemisphere').value;
 
-            // Define UTM projection string
             let utmProj = `+proj=utm +zone=${zone} +datum=WGS84`;
             if (hemisphere === 'S') utmProj += " +south";
 
-            // Convert to WGS84 (lat/lon)
             const [lon, lat] = proj4(utmProj, 'WGS84', [easting, northing]);
 
-            // Display result
             document.getElementById('result').innerText = `Latitude: ${lat.toFixed(6)}, Longitude: ${lon.toFixed(6)}`;
         }
     </script>
