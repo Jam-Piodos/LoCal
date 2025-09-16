@@ -3,104 +3,68 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="initial-scale=1.0">
-  <title>Project Kalasan - Manolo Fortich Mapper</title>
+  <title>Project Kalasan - Lot Plotter</title>
 
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.3.1/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.3.1/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/proj4/dist/proj4.js"></script>
 
   <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-    #map { height: 500px; }
-    .form-container {
-      background: #fff; padding: 15px; margin: 10px auto;
-      width: 300px; border-radius: 8px;
-      box-shadow: 0 0 8px rgba(0,0,0,0.3);
-      text-align: center;
-    }
-    input { margin: 5px; width: 100%; padding: 6px; }
-    button { padding: 6px 12px; margin-top: 8px; }
+    #map { height: 100vh; width: 100%; }
   </style>
 </head>
 <body>
+  <div id="map"></div>
 
-<div class="form-container">
-  <h3>Local Survey Grid → GPS (Scaled to Manolo Fortich)</h3>
-  <label>Easting (m):</label>
-  <input type="number" id="easting" value="23198.62">
-  <label>Northing (m):</label>
-  <input type="number" id="northing" value="23425.24">
-  <button onclick="convert()">Convert</button>
-  <p id="result"></p>
-</div>
+  <script>
+    // === Local Northing/Easting coordinates from the survey ===
+    // Exclude the tie line, keep only actual lot corners
+    const localCoords = [
+      { id: 1, northing: 23425.240, easting: 23198.620 },
+      { id: 2, northing: 23111.940, easting: 23519.570 },
+      { id: 3, northing: 23064.430, easting: 23301.590 },
+      { id: 4, northing: 23203.940, easting: 23018.230 }
+    ];
 
-<div id="map"></div>
+    // === Anchor point (Point 3 actual GPS location) ===
+    const anchorLocal = { northing: 23111.940, easting: 23519.570 }; // point 3 local
+    const anchorGPS = { lat: 8.397676, lng: 124.894605 }; // point 3 actual GPS
 
-<script>
-  // --- Define Manolo Fortich GPS bounds (approx) ---
-  const manoloBounds = {
-    minLat: 8.35,
-    maxLat: 8.55,
-    minLng: 124.75,
-    maxLng: 125.05
-  };
+    // Compute translation offset
+    const northingOffset = anchorGPS.lat - anchorLocal.northing;
+    const eastingOffset  = anchorGPS.lng - anchorLocal.easting;
 
-  // --- Define local survey grid bounds (from technical desc values) ---
-  const localBounds = {
-    minE: 20000, maxE: 24000,
-    minN: 23000, maxN: 24000
-  };
-
-  // --- Init map with satellite view ---
-  var map = L.map('map').setView([8.45, 124.9], 13);
-
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    attribution: 'Tiles © Esri, Maxar, Earthstar Geographics'
-  }).addTo(map);
-
-  var marker;
-
-  function scaleToManolo(easting, northing) {
-    // Normalize 0-1 in local grid
-    let normE = (easting - localBounds.minE) / (localBounds.maxE - localBounds.minE);
-    let normN = (northing - localBounds.minN) / (localBounds.maxN - localBounds.minN);
-
-    // Scale into Manolo GPS bounds
-    let lat = manoloBounds.minLat + normN * (manoloBounds.maxLat - manoloBounds.minLat);
-    let lng = manoloBounds.minLng + normE * (manoloBounds.maxLng - manoloBounds.minLng);
-
-    return [lat, lng];
-  }
-
-  function convert() {
-    let e = parseFloat(document.getElementById("easting").value);
-    let n = parseFloat(document.getElementById("northing").value);
-
-    if (isNaN(e) || isNaN(n)) {
-      alert("Please enter valid numbers");
-      return;
+    // Convert local coords to GPS using translation
+    function localToGPS(local) {
+      return [
+        local.northing + northingOffset,
+        local.easting + eastingOffset
+      ];
     }
 
-    let [lat, lng] = scaleToManolo(e, n);
+    // Convert all lot points
+    const lotPoints = localCoords.map(pt => localToGPS(pt));
 
-    document.getElementById("result").innerText =
-      `Latitude: ${lat.toFixed(6)}, Longitude: ${lng.toFixed(6)}`;
+    // === Initialize Map ===
+    const map = L.map('map').setView([anchorGPS.lat, anchorGPS.lng], 15);
 
-    // Remove old marker if exists
-    if (marker) map.removeLayer(marker);
+    // Satellite basemap
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles © Esri'
+    }).addTo(map);
 
-    // Add circle marker
-    marker = L.circleMarker([lat, lng], {
-      color: "red",
-      radius: 8,
-      fillColor: "#f03",
-      fillOpacity: 0.7
-    }).addTo(map).bindPopup(`E:${e}, N:${n}<br>Lat:${lat.toFixed(6)}, Lng:${lng.toFixed(6)}`).openPopup();
+    // Draw polygon
+    L.polygon(lotPoints, { color: 'red' }).addTo(map).bindPopup("Lot Boundary");
 
-    map.setView([lat, lng], 15);
-  }
+    // Add markers for each point
+    lotPoints.forEach((pt, i) => {
+      L.circleMarker(pt, { radius: 6, color: 'blue', fillColor: 'cyan', fillOpacity: 0.8 })
+        .addTo(map)
+        .bindPopup("Point " + (i+1));
+    });
 
-  // Run initial conversion
-  convert();
-</script>
+    // Fit map to polygon
+    map.fitBounds(lotPoints);
+  </script>
 </body>
 </html>
