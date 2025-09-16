@@ -3,131 +3,104 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="initial-scale=1.0">
-  <title>Lot 185 - UTM to GPS</title>
+  <title>Project Kalasan - Manolo Fortich Mapper</title>
+
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-    }
-    #map {
-      width: 100%;
-      height: 85vh;
-    }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    #map { height: 500px; }
     .form-container {
-      padding: 10px;
-      background: #f8f9fa;
-      border-bottom: 1px solid #ccc;
+      background: #fff; padding: 15px; margin: 10px auto;
+      width: 300px; border-radius: 8px;
+      box-shadow: 0 0 8px rgba(0,0,0,0.3);
+      text-align: center;
     }
-    input, button {
-      margin: 5px;
-      padding: 6px;
-      font-size: 14px;
-    }
+    input { margin: 5px; width: 100%; padding: 6px; }
+    button { padding: 6px 12px; margin-top: 8px; }
   </style>
 </head>
 <body>
-  <!-- Input BLMM1 true UTM coords -->
-  <div class="form-container">
-    <label>BLMM1 UTM Easting:</label>
-    <input type="number" id="blmmE" value="500000"> <!-- Replace with actual value -->
 
-    <label>BLMM1 UTM Northing:</label>
-    <input type="number" id="blmmN" value="930000"> <!-- Replace with actual value -->
+<div class="form-container">
+  <h3>Local Survey Grid → GPS (Scaled to Manolo Fortich)</h3>
+  <label>Easting (m):</label>
+  <input type="number" id="easting" value="23198.62">
+  <label>Northing (m):</label>
+  <input type="number" id="northing" value="23425.24">
+  <button onclick="convert()">Convert</button>
+  <p id="result"></p>
+</div>
 
-    <label>Zone:</label>
-    <input type="number" id="zone" value="51">
+<div id="map"></div>
 
-    <label>Hemisphere:</label>
-    <select id="hemisphere">
-      <option value="N" selected>Northern</option>
-      <option value="S">Southern</option>
-    </select>
+<script>
+  // --- Define Manolo Fortich GPS bounds (approx) ---
+  const manoloBounds = {
+    minLat: 8.35,
+    maxLat: 8.55,
+    minLng: 124.75,
+    maxLng: 125.05
+  };
 
-    <button onclick="plotLot()">Plot Lot 185</button>
-  </div>
+  // --- Define local survey grid bounds (from technical desc values) ---
+  const localBounds = {
+    minE: 20000, maxE: 24000,
+    minN: 23000, maxN: 24000
+  };
 
-  <div id="map"></div>
+  // --- Init map with satellite view ---
+  var map = L.map('map').setView([8.45, 124.9], 13);
 
-  <script>
-    // Create map centered on Manolo Fortich
-    var map = L.map('map').setView([8.37, 124.86], 13);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri, Maxar, Earthstar Geographics'
+  }).addTo(map);
 
-    // Satellite tiles
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      attribution: 'Tiles © Esri, Maxar, Earthstar Geographics, and the GIS User Community'
-    }).addTo(map);
+  var marker;
 
-    var lotLayer;
+  function scaleToManolo(easting, northing) {
+    // Normalize 0-1 in local grid
+    let normE = (easting - localBounds.minE) / (localBounds.maxE - localBounds.minE);
+    let normN = (northing - localBounds.minN) / (localBounds.maxN - localBounds.minN);
 
-    // Local coordinates from survey (Technical Description)
-    const localPoints = [
-      [23425.420, 23198.620], // P1 (N, E)
-      [23354.420, 23189.620], // P2
-      [23311.940, 23159.570], // P3
-      [23304.490, 23301.590]  // P4
-    ];
+    // Scale into Manolo GPS bounds
+    let lat = manoloBounds.minLat + normN * (manoloBounds.maxLat - manoloBounds.minLat);
+    let lng = manoloBounds.minLng + normE * (manoloBounds.maxLng - manoloBounds.minLng);
 
-    function plotLot() {
-      const blmmE = parseFloat(document.getElementById('blmmE').value);
-      const blmmN = parseFloat(document.getElementById('blmmN').value);
-      const zone = parseInt(document.getElementById('zone').value);
-      const hemisphere = document.getElementById('hemisphere').value;
+    return [lat, lng];
+  }
 
-      if (isNaN(blmmE) || isNaN(blmmN)) {
-        alert("Please input BLMM1 UTM coordinates!");
-        return;
-      }
+  function convert() {
+    let e = parseFloat(document.getElementById("easting").value);
+    let n = parseFloat(document.getElementById("northing").value);
 
-      // Projection string
-      let utmProj = `+proj=utm +zone=${zone} +datum=WGS84`;
-      if (hemisphere === 'S') utmProj += " +south";
-
-      // Clear old lot
-      if (lotLayer) {
-        map.removeLayer(lotLayer);
-      }
-
-      lotLayer = L.layerGroup().addTo(map);
-
-      let latlngs = [];
-
-      localPoints.forEach(([northing, easting], idx) => {
-        // Apply translation from local → UTM
-        let E_utm = blmmE + (easting - 20000);
-        let N_utm = blmmN + (northing - 20000);
-
-        // Convert UTM → WGS84
-        const [lon, lat] = proj4(utmProj, 'WGS84', [E_utm, N_utm]);
-
-        latlngs.push([lat, lon]);
-
-        // Mark each corner
-        L.circleMarker([lat, lon], {
-          radius: 6,
-          color: "red",
-          fillColor: "red",
-          fillOpacity: 0.9
-        }).bindPopup(`P${idx+1}<br>Lat: ${lat.toFixed(6)}, Lon: ${lon.toFixed(6)}`)
-          .addTo(lotLayer);
-      });
-
-      // Close polygon
-      latlngs.push(latlngs[0]);
-
-      // Draw polygon
-      L.polygon(latlngs, {
-        color: "yellow",
-        weight: 2,
-        fillColor: "orange",
-        fillOpacity: 0.3
-      }).addTo(lotLayer);
-
-      // Fit map to polygon
-      map.fitBounds(latlngs);
+    if (isNaN(e) || isNaN(n)) {
+      alert("Please enter valid numbers");
+      return;
     }
-  </script>
+
+    let [lat, lng] = scaleToManolo(e, n);
+
+    document.getElementById("result").innerText =
+      `Latitude: ${lat.toFixed(6)}, Longitude: ${lng.toFixed(6)}`;
+
+    // Remove old marker if exists
+    if (marker) map.removeLayer(marker);
+
+    // Add circle marker
+    marker = L.circleMarker([lat, lng], {
+      color: "red",
+      radius: 8,
+      fillColor: "#f03",
+      fillOpacity: 0.7
+    }).addTo(map).bindPopup(`E:${e}, N:${n}<br>Lat:${lat.toFixed(6)}, Lng:${lng.toFixed(6)}`).openPopup();
+
+    map.setView([lat, lng], 15);
+  }
+
+  // Run initial conversion
+  convert();
+</script>
 </body>
 </html>
