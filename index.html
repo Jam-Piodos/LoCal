@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>UTM to GPS Converter with Map (Local Grid Adjustment)</title>
+  <title>UTM to GPS Converter - Manolo Fortich</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -52,26 +52,35 @@
   <div id="map"></div>
 
   <script>
-    // Initialize map
-    const map = L.map('map').setView([8.5, 125], 7);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
+    // Initialize map centered on Manolo Fortich
+    const map = L.map('map').setView([8.3692, 124.8646], 14);
+
+    // Satellite basemap (Esri World Imagery)
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles © Esri, Maxar, Earthstar Geographics, and the GIS User Community'
     }).addTo(map);
+
+    // Restrict panning to Manolo Fortich area
+    map.setMaxBounds([
+      [8.30, 124.80],  // Southwest corner
+      [8.45, 124.95]   // Northeast corner
+    ]);
+    map.setMinZoom(13);
 
     let marker;
 
-    // === CONFIG: Update this with real BLMM tie point coordinates ===
+    // === CONFIG: Replace with actual BLMM tie point (UTM Zone 51N) ===
     const tiePointUTM = {
-      easting: 700000,   // Replace with BLMM 1 Easting (UTM Zone 51N)
-      northing: 950000,  // Replace with BLMM 1 Northing (UTM Zone 51N)
+      easting: 700000,   // Example only
+      northing: 950000,  // Example only
       zone: 51,
       hemisphere: 'N'
     };
 
     // === CONFIG: Local offsets of BLMM 1 in survey system (from VIDAS37 plan) ===
     const tiePointLocal = {
-      easting: 20000,   // Example from survey sheet
-      northing: 23000  // Example from survey sheet
+      easting: 20000,   // Example only
+      northing: 23000   // Example only
     };
 
     function convertLocal() {
@@ -104,7 +113,7 @@
       } else {
         marker = L.marker([lat, lon]).addTo(map);
       }
-      map.setView([lat, lon], 17);
+      map.setView([lat, lon], 18);
     }
   </script>
 </body>
