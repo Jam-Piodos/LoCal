@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>UTM to GPS Converter</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+</head>
+<body>
+    <h2>UTM to Latitude/Longitude Converter</h2>
+    <form id="utmForm">
+        <label>Easting (meters): </label>
+        <input type="number" id="easting" required><br><br>
+
+        <label>Northing (meters): </label>
+        <input type="number" id="northing" required><br><br>
+
+        <label>UTM Zone: </label>
+        <input type="number" id="zone" min="1" max="60" required><br><br>
+
+        <label>Hemisphere: </label>
+        <select id="hemisphere">
+            <option value="N">Northern</option>
+            <option value="S">Southern</option>
+        </select><br><br>
+
+        <button type="button" onclick="convertUTM()">Convert</button>
+    </form>
+
+    <h3>Result:</h3>
+    <p id="result">Latitude: - , Longitude: -</p>
+
+    <script>
+        function convertUTM() {
+            const easting = parseFloat(document.getElementById('easting').value);
+            const northing = parseFloat(document.getElementById('northing').value);
+            const zone = parseInt(document.getElementById('zone').value);
+            const hemisphere = document.getElementById('hemisphere').value;
+
+            // Define UTM projection string
+            let utmProj = `+proj=utm +zone=${zone} +datum=WGS84`;
+            if (hemisphere === 'S') utmProj += " +south";
+
+            // Convert to WGS84 (lat/lon)
+            const [lon, lat] = proj4(utmProj, 'WGS84', [easting, northing]);
+
+            // Display result
+            document.getElementById('result').innerText = `Latitude: ${lat.toFixed(6)}, Longitude: ${lon.toFixed(6)}`;
+        }
+    </script>
+</body>
+</html>
