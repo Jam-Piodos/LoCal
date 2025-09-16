@@ -1,136 +1,290 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="initial-scale=1.0">
-  <title>UTM to GPS - Manolo Fortich</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="initial-scale=1.0" />
+  <title>VIDAS37 Local → UTM → GPS (Manolo Fortich)</title>
+
+  <!-- Leaflet + Proj4 -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.8.0/proj4.js"></script>
+
   <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-    }
-    #map {
-      width: 100%;
-      height: 80vh;
-    }
-    .form-container {
-      padding: 15px;
-      background: #f8f9fa;
-      border-bottom: 1px solid #ddd;
-    }
-    .form-container input, .form-container select, .form-container button {
-      margin: 5px;
-      padding: 8px;
-      font-size: 14px;
-    }
+    body { margin:0; font-family: Arial, sans-serif; }
+    .topbar { padding:12px; background:#f6f8fa; border-bottom:1px solid #e1e4e8; }
+    .topbar label { display:inline-block; width:120px; font-weight:600; }
+    .topbar input, .topbar select { margin:6px 8px 6px 0; padding:6px; }
+    .topbar .small { font-size:13px; color:#555; display:block; margin-top:6px; }
+    #map { width:100%; height:78vh; }
+    .section { padding:10px 12px; }
+    .warning { color: #c0392b; font-weight:600; }
   </style>
 </head>
 <body>
-  <!-- UTM input form -->
-  <div class="form-container">
-    <label>Easting (m):</label>
-    <input type="number" id="easting" placeholder="Easting">
 
-    <label>Northing (m):</label>
-    <input type="number" id="northing" placeholder="Northing">
-
-    <label>Zone:</label>
-    <input type="number" id="zone" min="1" max="60" placeholder="51">
-
-    <label>Hemisphere:</label>
-    <select id="hemisphere">
-      <option value="N">Northern</option>
-      <option value="S">Southern</option>
+  <div class="topbar">
+    <!-- Mode -->
+    <label>Transform type</label>
+    <select id="mode" onchange="onModeChange()">
+      <option value="shift">Simple shift (1 tie point)</option>
+      <option value="similarity">Similarity (2 control points)</option>
     </select>
 
-    <button onclick="convertUTM()">Convert & Show on Map</button>
+    <!-- Local point to convert -->
+    <label>Local Easting</label>
+    <input id="localE" type="number" step="any" placeholder="e.g. 23198.620" />
+    <label>Local Northing</label>
+    <input id="localN" type="number" step="any" placeholder="e.g. 23425.240" />
+    <br/>
+
+    <!-- UTM zone/hemisphere (result) -->
+    <label>UTM Zone</label>
+    <input id="zone" type="number" min="1" max="60" value="51" style="width:70px" />
+    <label>Hemisphere</label>
+    <select id="hemisphere" style="width:80px">
+      <option value="N">N</option>
+      <option value="S">S</option>
+    </select>
+
+    <button onclick="performTransform()" style="margin-left:12px; padding:8px 12px;">Convert & Show</button>
+
+    <div class="small">Notes: Provide your VIDAS37 <em>local</em> coordinates for the point above. Then supply control points below depending on mode.</div>
   </div>
 
-  <!-- Map -->
+  <div class="section" id="controls">
+    <!-- Simple shift controls -->
+    <div id="shiftControls">
+      <div><strong>Simple shift (1 tie point)</strong> — Provide the same tie point in local coordinates and its true UTM (Easting/Northing).</div>
+      <label style="width:160px; display:inline-block">Tie Local Easting</label>
+      <input id="tieLocalE" type="number" step="any" placeholder="e.g. 23189.620" />
+      <label style="width:160px; display:inline-block">Tie Local Northing</label>
+      <input id="tieLocalN" type="number" step="any" placeholder="e.g. 23354.420" />
+      <br/>
+      <label style="width:160px; display:inline-block">Tie UTM Easting</label>
+      <input id="tieUTME" type="number" step="any" placeholder="e.g. 485000.000" />
+      <label style="width:160px; display:inline-block">Tie UTM Northing</label>
+      <input id="tieUTMN" type="number" step="any" placeholder="e.g. 926000.000" />
+      <div class="small">Get the tie point's <strong>actual UTM</strong> (e.g. BLMM 1) from the control database (NAMRIA/DENR) or survey sheet.</div>
+    </div>
+
+    <!-- Similarity (2 control points) -->
+    <div id="simControls" style="display:none; margin-top:10px;">
+      <div><strong>Similarity transform (2 control points)</strong> — Provide two pairs: Local1→UTM1 and Local2→UTM2.</div>
+
+      <div style="margin-top:6px"><em>Control point 1</em></div>
+      <label style="width:160px; display:inline-block">Local1 Easting</label>
+      <input id="loc1E" type="number" step="any" />
+      <label style="width:160px; display:inline-block">Local1 Northing</label>
+      <input id="loc1N" type="number" step="any" />
+      <br/>
+      <label style="width:160px; display:inline-block">UTM1 Easting</label>
+      <input id="utm1E" type="number" step="any" />
+      <label style="width:160px; display:inline-block">UTM1 Northing</label>
+      <input id="utm1N" type="number" step="any" />
+
+      <div style="margin-top:8px"><em>Control point 2</em></div>
+      <label style="width:160px; display:inline-block">Local2 Easting</label>
+      <input id="loc2E" type="number" step="any" />
+      <label style="width:160px; display:inline-block">Local2 Northing</label>
+      <input id="loc2N" type="number" step="any" />
+      <br/>
+      <label style="width:160px; display:inline-block">UTM2 Easting</label>
+      <input id="utm2E" type="number" step="any" />
+      <label style="width:160px; display:inline-block">UTM2 Northing</label>
+      <input id="utm2N" type="number" step="any" />
+
+      <div class="small">Similarity transform derives scale+rotation+translation from the two control pairs. Use local→UTM matches from your survey & control monuments.</div>
+    </div>
+
+    <div style="margin-top:8px;">
+      <label style="width:160px; display:inline-block">Circle radius (m)</label>
+      <input id="radius" type="number" value="20" style="width:90px" />
+      <label style="width:160px; display:inline-block">Allow outside Manolo?</label>
+      <input id="allowOutside" type="checkbox" />
+    </div>
+
+    <div id="resultText" style="margin-top:8px; font-weight:600;"></div>
+  </div>
+
   <div id="map"></div>
 
-  <script>
-    // Approximate bounds for Manolo Fortich (lat/lon box)
-    var manoloBounds = [
-      [8.28, 124.77], // Southwest
-      [8.47, 124.95]  // Northeast
-    ];
+<script>
+/* ========== Map setup (Manolo bounds, satellite) ========== */
+const manoloBounds = [
+  [8.28, 124.77], // SW
+  [8.47, 124.95]  // NE
+];
 
-    // Create map centered on Manolo Fortich with bounds
-    var map = L.map('map', {
-      maxBounds: manoloBounds, // restrict view
-      maxBoundsViscosity: 1.0, // lock to bounds
-      minZoom: 12,
-      maxZoom: 18
-    }).setView([8.3692, 124.8646], 13);
+const map = L.map('map', {
+  maxBounds: manoloBounds,
+  maxBoundsViscosity: 1.0,
+  minZoom: 12,
+  maxZoom: 19
+}).setView([8.3692, 124.8646], 13);
 
-    // Satellite basemap
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-      attribution: 'Tiles © Esri, Maxar, Earthstar Geographics, and the GIS User Community'
-    }).addTo(map);
+// Satellite basemap (Esri World Imagery)
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Tiles © Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+}).addTo(map);
 
-    var markerLayer; // to hold the marker & circle
+let markerLayer = null;
 
-    function convertUTM() {
-      const easting = parseFloat(document.getElementById('easting').value);
-      const northing = parseFloat(document.getElementById('northing').value);
-      const zone = parseInt(document.getElementById('zone').value);
-      const hemisphere = document.getElementById('hemisphere').value;
+/* ========== UI mode switching ========== */
+function onModeChange() {
+  const mode = document.getElementById('mode').value;
+  document.getElementById('shiftControls').style.display = (mode === 'shift') ? 'block' : 'none';
+  document.getElementById('simControls').style.display = (mode === 'similarity') ? 'block' : 'none';
+}
+onModeChange();
 
-      if (isNaN(easting) || isNaN(northing) || isNaN(zone)) {
-        alert("Please enter valid UTM values!");
+/* ========== Math helpers ========== */
+// Apply similarity transform derived from two control pairs
+// p: local point [x,y]; p1,p2 local; q1,q2 utm
+// returns q: transformed UTM [X,Y]
+function applySimilarityTransform(p, p1, p2, q1, q2) {
+  const dp = [p2[0] - p1[0], p2[1] - p1[1]];
+  const dq = [q2[0] - q1[0], q2[1] - q1[1]];
+  const len_dp = Math.hypot(dp[0], dp[1]);
+  const len_dq = Math.hypot(dq[0], dq[1]);
+  if (len_dp < 1e-8) throw new Error("Control local points are identical (invalid).");
+
+  const s = len_dq / len_dp;
+  const ang_dp = Math.atan2(dp[1], dp[0]);
+  const ang_dq = Math.atan2(dq[1], dq[0]);
+  const theta = ang_dq - ang_dp;
+  const c = Math.cos(theta), si = Math.sin(theta);
+
+  // rotation+scale matrix: s * [ [c, -si], [si, c] ]
+  // compute translation t = q1 - sR * p1
+  const sR_p1_x = s * (c * p1[0] - si * p1[1]);
+  const sR_p1_y = s * (si * p1[0] + c * p1[1]);
+  const tx = q1[0] - sR_p1_x;
+  const ty = q1[1] - sR_p1_y;
+
+  // apply to p
+  const sR_p_x = s * (c * p[0] - si * p[1]);
+  const sR_p_y = s * (si * p[0] + c * p[1]);
+  return [ sR_p_x + tx, sR_p_y + ty ];
+}
+
+/* ========== Transform & plot handler ========== */
+function performTransform() {
+  const mode = document.getElementById('mode').value;
+  const localE = parseFloat(document.getElementById('localE').value);
+  const localN = parseFloat(document.getElementById('localN').value);
+  const zone = parseInt(document.getElementById('zone').value);
+  const hemisphere = document.getElementById('hemisphere').value;
+  const allowOutside = document.getElementById('allowOutside').checked;
+  const radiusM = Number(document.getElementById('radius').value) || 20;
+
+  document.getElementById('resultText').textContent = '';
+
+  if (isNaN(localE) || isNaN(localN)) {
+    alert("Enter valid local Easting and Northing (from VIDAS37).");
+    return;
+  }
+
+  let globalE, globalN; // UTM coordinates after transformation
+
+  try {
+    if (mode === 'shift') {
+      const tieLocalE = parseFloat(document.getElementById('tieLocalE').value);
+      const tieLocalN = parseFloat(document.getElementById('tieLocalN').value);
+      const tieUTME = parseFloat(document.getElementById('tieUTME').value);
+      const tieUTMN = parseFloat(document.getElementById('tieUTMN').value);
+      if ([tieLocalE,tieLocalN,tieUTME,tieUTMN].some(v => isNaN(v))) {
+        alert("In Simple shift mode provide tie point local coords and tie point UTM coords.");
         return;
       }
 
-      // Build UTM projection string
-      let utmProj = `+proj=utm +zone=${zone} +datum=WGS84`;
-      if (hemisphere === 'S') utmProj += " +south";
+      // Simple translation (no rotation/scale)
+      globalE = tieUTME + (localE - tieLocalE);
+      globalN = tieUTMN + (localN - tieLocalN);
 
-      // Convert UTM → Lat/Lon
-      const [lon, lat] = proj4(utmProj, 'WGS84', [easting, northing]);
+    } else {
+      // Similarity mode: need loc1,loc2 -> utm1,utm2
+      const loc1E = parseFloat(document.getElementById('loc1E').value);
+      const loc1N = parseFloat(document.getElementById('loc1N').value);
+      const utm1E = parseFloat(document.getElementById('utm1E').value);
+      const utm1N = parseFloat(document.getElementById('utm1N').value);
+      const loc2E = parseFloat(document.getElementById('loc2E').value);
+      const loc2N = parseFloat(document.getElementById('loc2N').value);
+      const utm2E = parseFloat(document.getElementById('utm2E').value);
+      const utm2N = parseFloat(document.getElementById('utm2N').value);
 
-      // Check if inside Manolo bounds
-      if (
-        lat < manoloBounds[0][0] || lat > manoloBounds[1][0] ||
-        lon < manoloBounds[0][1] || lon > manoloBounds[1][1]
-      ) {
-        alert("The converted point is outside Manolo Fortich bounds!");
+      if ([loc1E,loc1N,utm1E,utm1N,loc2E,loc2N,utm2E,utm2N].some(v => isNaN(v))) {
+        alert("In Similarity mode provide two control pairs (local→UTM).");
         return;
       }
 
-      // Center map on result
-      map.setView([lat, lon], 16);
+      const p = [localE, localN];
+      const p1 = [loc1E, loc1N];
+      const p2 = [loc2E, loc2N];
+      const q1 = [utm1E, utm1N];
+      const q2 = [utm2E, utm2N];
 
-      // Remove previous marker/circle
-      if (markerLayer) {
-        map.removeLayer(markerLayer);
-      }
-
-      // Create a group layer for marker + circle
-      markerLayer = L.layerGroup().addTo(map);
-
-      // Red circle marker
-      L.circleMarker([lat, lon], {
-        radius: 8,
-        color: "#ff0000",
-        fillColor: "#ff0000",
-        fillOpacity: 0.9
-      }).bindPopup(`Converted Point<br>Lat: ${lat.toFixed(6)}<br>Lon: ${lon.toFixed(6)}`)
-        .addTo(markerLayer)
-        .openPopup();
-
-      // 20m scalable circle
-      L.circle([lat, lon], {
-        radius: 20, // meters
-        color: "#ff0000",
-        weight: 1,
-        fillColor: "#ff6666",
-        fillOpacity: 0.3
-      }).addTo(markerLayer);
+      // compute
+      [globalE, globalN] = applySimilarityTransform(p, p1, p2, q1, q2);
     }
-  </script>
+  } catch (err) {
+    alert("Transformation error: " + err.message);
+    return;
+  }
+
+  // Convert UTM (globalE/globalN) to lat/lon using proj4
+  const utmProj = `+proj=utm +zone=${zone} +datum=WGS84` + (hemisphere === 'S' ? ' +south' : '');
+  let latlng;
+  try {
+    const conv = proj4(utmProj, 'WGS84', [globalE, globalN]);
+    // proj4 returns [lon, lat]
+    latlng = { lat: conv[1], lon: conv[0] };
+  } catch (e) {
+    alert("Proj4 conversion failed: " + e.message);
+    return;
+  }
+
+  // Check Manolo bounds
+  const lat = latlng.lat, lon = latlng.lon;
+  const inside =
+    lat >= manoloBounds[0][0] && lat <= manoloBounds[1][0] &&
+    lon >= manoloBounds[0][1] && lon <= manoloBounds[1][1];
+
+  if (!inside && !allowOutside) {
+    const proceed = confirm("The converted point is outside Manolo Fortich bounds. Do you want to place it anyway?");
+    if (!proceed) {
+      return;
+    }
+  }
+
+  // Remove previous marker group
+  if (markerLayer) map.removeLayer(markerLayer);
+  markerLayer = L.layerGroup().addTo(map);
+
+  // Add fixed-size red dot
+  L.circleMarker([lat, lon], {
+    radius: 8,
+    color: "#ff0000",
+    fillColor: "#ff0000",
+    fillOpacity: 0.95
+  }).addTo(markerLayer)
+    .bindPopup(`Lat: ${lat.toFixed(6)}<br>Lon: ${lon.toFixed(6)} (UTM E:${globalE.toFixed(3)} N:${globalN.toFixed(3)})`)
+    .openPopup();
+
+  // Add scalable circle in meters
+  L.circle([lat, lon], {
+    radius: Number(radiusM),
+    color: "#ff0000",
+    weight: 1,
+    fillColor: "#ff6666",
+    fillOpacity: 0.25
+  }).addTo(markerLayer);
+
+  map.setView([lat, lon], 17);
+
+  document.getElementById('resultText').textContent =
+    `Converted UTM: E=${globalE.toFixed(3)}, N=${globalN.toFixed(3)} → Lat=${lat.toFixed(6)}, Lon=${lon.toFixed(6)}`;
+}
+</script>
 </body>
 </html>
