@@ -39,12 +39,49 @@
       font-weight: bold;
       font-size: 13px;
     }
-    .input-group input { 
+    .input-group input, .input-group select { 
       padding: 6px 8px; 
       border: 1px solid #ccc;
       border-radius: 3px;
+      font-size: 13px;
+    }
+    .input-group input {
       flex: 1;
       max-width: 200px;
+    }
+    .input-group select {
+      margin-right: 5px;
+      background: white;
+    }
+    
+    .bearing-input {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex: 1;
+    }
+    .bearing-input input {
+      max-width: 80px;
+    }
+    .bearing-input select {
+      width: 90px;
+      font-weight: bold;
+    }
+    
+    .bearing-mode {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .bearing-mode label {
+      display: flex;
+      align-items: center;
+      font-weight: normal;
+      width: auto;
+    }
+    .bearing-mode input[type="radio"] {
+      margin-right: 5px;
+      width: auto;
     }
     
     button { 
@@ -65,6 +102,9 @@
     
     .btn-danger { background: #f44336; }
     .btn-danger:hover { background: #da190b; }
+    
+    .btn-warning { background: #ff9800; }
+    .btn-warning:hover { background: #f57c00; }
     
     .btn-small { padding: 5px 10px; font-size: 12px; }
     
@@ -145,6 +185,7 @@
       <label>Longitude:</label>
       <input id="startLon" value="124.894305" type="number" step="any">
     </div>
+    <button class="btn-secondary btn-small" onclick="saveStartPoint()">💾 Save Start Point</button>
   </div>
   
   <div class="input-section">
@@ -157,8 +198,47 @@
     </div>
     
     <div class="input-group">
+      <label>Bearing Type:</label>
+      <div class="bearing-mode">
+        <label>
+          <input type="radio" name="bearingType" value="quadrant" checked onchange="updateBearingInputs()">
+          Quadrant (N43-02E)
+        </label>
+        <label>
+          <input type="radio" name="bearingType" value="cardinal" onchange="updateBearingInputs()">
+          Cardinal (N, S, E, W)
+        </label>
+      </div>
+    </div>
+    
+    <div class="input-group" id="quadrantInputs">
       <label>Bearing:</label>
-      <input id="bearing" placeholder="e.g., N43-02E or 43.5">
+      <div class="bearing-input">
+        <select id="dirNS">
+          <option value="N">North (N)</option>
+          <option value="S">South (S)</option>
+        </select>
+        <input id="degrees" type="number" min="0" max="90" step="any" placeholder="Deg" value="">
+        <span>°</span>
+        <input id="minutes" type="number" min="0" max="59" step="any" placeholder="Min" value="">
+        <span>'</span>
+        <select id="dirEW">
+          <option value="E">East (E)</option>
+          <option value="W">West (W)</option>
+        </select>
+      </div>
+    </div>
+    
+    <div class="input-group" id="cardinalInputs" style="display:none;">
+      <label>Direction:</label>
+      <div class="bearing-input">
+        <select id="cardinalDir">
+          <option value="N">North (N) - 0°</option>
+          <option value="E">East (E) - 90°</option>
+          <option value="S">South (S) - 180°</option>
+          <option value="W">West (W) - 270°</option>
+        </select>
+      </div>
     </div>
     
     <div class="input-group">
@@ -169,6 +249,7 @@
     <div>
       <button onclick="addPoint()">➕ Add Point</button>
       <button class="btn-secondary" onclick="plotTraverse()">🗺️ Update Map</button>
+      <button class="btn-warning" onclick="exportData()">📤 Export Data</button>
       <button class="btn-danger" onclick="clearAll()">🗑️ Clear All</button>
     </div>
   </div>
@@ -182,43 +263,64 @@
 </div>
 
 <script>
-// Storage for points
+// Storage for points (persisted in memory during session)
 let surveyPoints = [];
+let savedStartPoint = { lat: 8.398673, lon: 124.894305 };
 
-// Parse bearing notation
-function parseBearing(bearingStr) {
-  bearingStr = bearingStr.trim().toUpperCase();
+// Update bearing input visibility
+function updateBearingInputs() {
+  const type = document.querySelector('input[name="bearingType"]:checked').value;
+  document.getElementById('quadrantInputs').style.display = type === 'quadrant' ? 'flex' : 'none';
+  document.getElementById('cardinalInputs').style.display = type === 'cardinal' ? 'flex' : 'none';
+}
+
+// Save start point
+function saveStartPoint() {
+  const lat = parseFloat(document.getElementById('startLat').value);
+  const lon = parseFloat(document.getElementById('startLon').value);
   
-  if (!isNaN(bearingStr)) {
-    return parseFloat(bearingStr);
+  if (isNaN(lat) || isNaN(lon)) {
+    alert('Please enter valid coordinates');
+    return;
   }
   
-  const match = bearingStr.match(/([NS])(\d+)-?(\d+)?([EW])?/);
-  if (!match) return null;
+  savedStartPoint = { lat, lon };
+  alert('✓ Start point saved and stored in memory!');
+}
+
+// Get bearing from inputs
+function getBearingFromInputs() {
+  const type = document.querySelector('input[name="bearingType"]:checked').value;
   
-  const [, ns, deg, min, ew] = match;
-  let angle = parseFloat(deg);
-  if (min) angle += parseFloat(min) / 60;
-  
-  if (ns === 'N' && ew === 'E') {
-    return angle;
-  } else if (ns === 'S' && ew === 'E') {
-    return 180 - angle;
-  } else if (ns === 'S' && ew === 'W') {
-    return 180 + angle;
-  } else if (ns === 'N' && ew === 'W') {
-    return 360 - angle;
-  } else if (ns === 'N' && !ew) {
-    return 0;
-  } else if (ns === 'S' && !ew) {
-    return 180;
-  } else if (ns === 'E' && !ns) {
-    return 90;
-  } else if (ns === 'W' && !ns) {
-    return 270;
+  if (type === 'cardinal') {
+    const dir = document.getElementById('cardinalDir').value;
+    const bearings = { N: 0, E: 90, S: 180, W: 270 };
+    return { bearing: bearings[dir], bearingStr: dir };
+  } else {
+    const ns = document.getElementById('dirNS').value;
+    const ew = document.getElementById('dirEW').value;
+    const deg = parseFloat(document.getElementById('degrees').value);
+    const min = parseFloat(document.getElementById('minutes').value) || 0;
+    
+    if (isNaN(deg)) return null;
+    
+    let angle = deg + (min / 60);
+    const bearingStr = `${ns}${Math.floor(deg)}°${Math.floor(min).toString().padStart(2, '0')}'${ew}`;
+    
+    // Convert to azimuth (0-360, clockwise from North)
+    let azimuth;
+    if (ns === 'N' && ew === 'E') {
+      azimuth = angle;
+    } else if (ns === 'S' && ew === 'E') {
+      azimuth = 180 - angle;
+    } else if (ns === 'S' && ew === 'W') {
+      azimuth = 180 + angle;
+    } else if (ns === 'N' && ew === 'W') {
+      azimuth = 360 - angle;
+    }
+    
+    return { bearing: azimuth, bearingStr: bearingStr };
   }
-  
-  return null;
 }
 
 // Forward geodesic calculation
@@ -248,19 +350,18 @@ function destPoint(lat1, lon1, bearing, dist) {
 // Add point to list
 function addPoint() {
   const lineName = document.getElementById('lineName').value.trim();
-  const bearingStr = document.getElementById('bearing').value.trim();
   const distStr = document.getElementById('distance').value.trim();
   
-  if (!lineName || !bearingStr || !distStr) {
-    alert('Please fill in all fields');
+  if (!lineName || !distStr) {
+    alert('Please fill in line name and distance');
     return;
   }
   
-  const bearing = parseBearing(bearingStr);
+  const bearingData = getBearingFromInputs();
   const distance = parseFloat(distStr);
   
-  if (bearing === null) {
-    alert('Invalid bearing format. Use formats like: N43-02E, S41W, or 45.5');
+  if (!bearingData) {
+    alert('Please enter a valid bearing');
     return;
   }
   
@@ -269,10 +370,11 @@ function addPoint() {
     return;
   }
   
+  // Store point in memory
   surveyPoints.push({
     lineName: lineName,
-    bearingStr: bearingStr,
-    bearing: bearing,
+    bearingStr: bearingData.bearingStr,
+    bearing: bearingData.bearing,
     distance: distance
   });
   
@@ -285,10 +387,16 @@ function addPoint() {
     document.getElementById('lineName').value = `${match[2]}-${next}`;
   }
   
-  document.getElementById('bearing').value = '';
+  // Clear inputs
+  const type = document.querySelector('input[name="bearingType"]:checked').value;
+  if (type === 'quadrant') {
+    document.getElementById('degrees').value = '';
+    document.getElementById('minutes').value = '';
+    document.getElementById('degrees').focus();
+  }
   document.getElementById('distance').value = '';
-  document.getElementById('bearing').focus();
   
+  // Auto update map
   plotTraverse();
 }
 
@@ -305,7 +413,7 @@ function updatePointsList() {
   list.innerHTML = surveyPoints.map((pt, i) => `
     <div class="point-item">
       <span class="point-number">P${i + 2}</span>
-      <span class="point-info">${pt.lineName}: ${pt.bearingStr} (${pt.bearing.toFixed(2)}°), ${pt.distance}m</span>
+      <span class="point-info">${pt.lineName}: ${pt.bearingStr} (${pt.bearing.toFixed(2)}°) → ${pt.distance}m</span>
       <button class="btn-danger btn-small" onclick="removePoint(${i})">✕</button>
     </div>
   `).join('');
@@ -313,14 +421,16 @@ function updatePointsList() {
 
 // Remove point
 function removePoint(index) {
-  surveyPoints.splice(index, 1);
-  updatePointsList();
-  plotTraverse();
+  if (confirm('Remove this point?')) {
+    surveyPoints.splice(index, 1);
+    updatePointsList();
+    plotTraverse();
+  }
 }
 
 // Clear all
 function clearAll() {
-  if (surveyPoints.length > 0 && !confirm('Clear all points?')) {
+  if (surveyPoints.length > 0 && !confirm('Clear all points? This cannot be undone.')) {
     return;
   }
   surveyPoints = [];
@@ -329,8 +439,28 @@ function clearAll() {
   document.getElementById('info').style.display = 'none';
 }
 
+// Export data
+function exportData() {
+  if (!savedStartPoint || surveyPoints.length === 0) {
+    alert('No data to export. Add some points first.');
+    return;
+  }
+  
+  let output = `START POINT:\nLatitude: ${savedStartPoint.lat}\nLongitude: ${savedStartPoint.lon}\n\n`;
+  output += `SURVEY POINTS (${surveyPoints.length}):\n`;
+  output += `Line\tBearing\t\tAzimuth\tDistance(m)\n`;
+  output += `${'─'.repeat(60)}\n`;
+  
+  surveyPoints.forEach(pt => {
+    output += `${pt.lineName}\t${pt.bearingStr}\t${pt.bearing.toFixed(2)}°\t${pt.distance}\n`;
+  });
+  
+  alert('Data stored in memory:\n\n' + output);
+  console.log('Survey Data:', { startPoint: savedStartPoint, points: surveyPoints });
+}
+
 // Initialize map
-const map = L.map('map').setView([8.398673, 124.894305], 17);
+const map = L.map('map').setView([savedStartPoint.lat, savedStartPoint.lon], 17);
 
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
   attribution: 'Tiles © Esri',
@@ -342,13 +472,8 @@ let lotLayer = null;
 function plotTraverse() {
   if (lotLayer) map.removeLayer(lotLayer);
   
-  const startLat = parseFloat(document.getElementById('startLat').value);
-  const startLon = parseFloat(document.getElementById('startLon').value);
-  
-  if (isNaN(startLat) || isNaN(startLon)) {
-    alert('Please enter valid starting coordinates');
-    return;
-  }
+  const startLat = savedStartPoint.lat;
+  const startLon = savedStartPoint.lon;
   
   if (surveyPoints.length === 0) {
     document.getElementById('info').style.display = 'none';
@@ -386,7 +511,7 @@ function plotTraverse() {
     weight: 3, 
     fillOpacity: 0.15,
     fillColor: '#ffaa00'
-  }).addTo(lotLayer).bindPopup(`<b>Land Survey</b><br>Area: ${area.toFixed(2)} sq.m`);
+  }).addTo(lotLayer).bindPopup(`<b>Land Survey</b><br>Points: ${corners.length}<br>Area: ${area.toFixed(2)} sq.m`);
   
   corners.forEach((pt, i) => {
     L.circleMarker([pt.lat, pt.lon], {
@@ -395,7 +520,7 @@ function plotTraverse() {
       fillColor: i === 0 ? '#4CAF50' : '#2196F3', 
       fillOpacity: 1,
       weight: 2
-    }).addTo(lotLayer).bindPopup(`<b>Point ${i + 1}</b><br>${pt.lat.toFixed(7)}, ${pt.lon.toFixed(7)}`);
+    }).addTo(lotLayer).bindPopup(`<b>Point ${i + 1}</b><br>Lat: ${pt.lat.toFixed(7)}<br>Lon: ${pt.lon.toFixed(7)}`);
     
     L.marker([pt.lat, pt.lon], {
       icon: L.divIcon({
