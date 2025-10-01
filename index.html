@@ -3,20 +3,22 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>VIDAS37 Survey Traverse - Quadrant Bearing</title>
+<title>VIDAS37 Survey - Bearing Input</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  body{margin:0;font-family:Arial,sans-serif;display:flex;flex-direction:column;height:100vh;}
-  #map{flex:1;}
-  .panel{padding:10px;background:#f7f9fb;border-top:1px solid #ddd;max-height:45vh;overflow:auto;}
-  .input-group{margin-bottom:8px;display:flex;align-items:center;}
-  .input-group label{width:120px;font-weight:bold;font-size:13px;}
-  .input-group input, .input-group select{padding:5px 8px;border:1px solid #ccc;border-radius:3px;font-size:13px;flex:1;}
-  button{background:#4CAF50;color:white;border:none;padding:8px 12px;border-radius:3px;cursor:pointer;margin-right:5px;}
-  button:hover{background:#45a049;}
-  .points-list{border:1px solid #ddd;padding:8px;border-radius:4px;max-height:200px;overflow:auto;margin-top:10px;font-size:13px;}
-  .point-item{display:flex;justify-content:space-between;border-bottom:1px solid #eee;padding:3px 0;}
+  body { margin:0; font-family: Arial, sans-serif; display:flex; flex-direction: column; height:100vh; }
+  #map { flex:1; }
+  .panel { padding:10px; background:#f7f9fb; border-top:2px solid #ddd; max-height:45vh; overflow-y:auto; }
+  .input-group { margin-bottom:8px; display:flex; align-items:center; }
+  .input-group label { width:120px; font-weight:bold; font-size:13px; }
+  .input-group input, select { padding:5px 8px; font-size:13px; border:1px solid #ccc; border-radius:3px; }
+  .bearing-input { display:flex; gap:5px; align-items:center; }
+  .bearing-input input { width:60px; }
+  button { margin-top:5px; padding:8px 14px; border:none; border-radius:4px; font-size:13px; cursor:pointer; }
+  .btn-add { background:#4CAF50; color:white; }
+  .btn-clear { background:#f44336; color:white; }
+  .points-list { margin-top:10px; background:white; border:1px solid #ddd; border-radius:4px; max-height:200px; overflow-y:auto; padding:5px; font-family: monospace; font-size:12px; }
 </style>
 </head>
 <body>
@@ -24,116 +26,129 @@
 <div id="map"></div>
 
 <div class="panel">
-<h3>Starting Point (Lat/Lon)</h3>
-<div class="input-group">
-<label>Latitude:</label><input id="startLat" type="number" step="any" value="8.398673">
-</div>
-<div class="input-group">
-<label>Longitude:</label><input id="startLon" type="number" step="any" value="124.894305">
-</div>
-<button onclick="saveStartPoint()">Save Start Point</button>
+  <h3>➕ Add Bearing</h3>
+  <div class="input-group">
+    <label>Bearing:</label>
+    <div class="bearing-input">
+      <select id="dirNS">
+        <option value="N">N</option>
+        <option value="S">S</option>
+      </select>
+      <input type="number" id="deg" placeholder="Deg" min="0" max="90">
+      <input type="number" id="min" placeholder="Min" min="0" max="59">
+      <select id="dirEW">
+        <option value="E">E</option>
+        <option value="W">W</option>
+      </select>
+    </div>
+  </div>
+  <div class="input-group">
+    <label>Distance (m):</label>
+    <input type="number" id="distance" placeholder="Optional for first point">
+  </div>
+  <button class="btn-add" onclick="addPoint()">Add Point</button>
+  <button class="btn-clear" onclick="clearAll()">Clear All</button>
 
-<h3>Add Traverse Point</h3>
-<div class="input-group">
-<label>Line Name:</label><input id="lineName" placeholder="1-2">
-</div>
-<div class="input-group">
-<label>Bearing (Quadrant):</label>
-<div style="display:flex;gap:5px;">
-<select id="ns"><option value="N">N</option><option value="S">S</option></select>
-<input id="deg" type="number" min="0" max="90" placeholder="deg">
-<input id="min" type="number" min="0" max="59" placeholder="min">
-<select id="ew"><option value="E">E</option><option value="W">W</option></select>
-</div>
-</div>
-<div class="input-group">
-<label>Distance (m):</label><input id="distance" type="number" placeholder="Optional for first point">
-</div>
-<button onclick="addPoint()">Add Point</button>
-<button onclick="plotTraverse()">Update Map</button>
-<button onclick="clearAll()">Clear All</button>
-
-<h3>Points List (<span id="pointCount">0</span>)</h3>
-<div class="points-list" id="pointsList">No points added yet.</div>
+  <h3>📋 Points</h3>
+  <div class="points-list" id="pointsList">No points added yet.</div>
 </div>
 
 <script>
-// --- VIDAS37 parameters ---
-const R=6378137; const originLat=0; const originLon=125; const k0=0.9996; const falseEasting=500000; const falseNorthing=0;
-function latLonToVIDAS37(lat,lon){const φ=lat*Math.PI/180,λ=lon*Math.PI/180,λ0=originLon*Math.PI/180,N=R/Math.sqrt(1-0.00669438*Math.sin(φ)**2),T=Math.tan(φ)**2,C=0.00673949675*Math.cos(φ)**2,A=(λ-λ0)*Math.cos(φ),M=R*((1-0.00669438/4-3*0.00669438**2/64-5*0.00669438**3/256)*φ-(3*0.00669438/8+3*0.00669438**2/32+45*0.00669438**3/1024)*Math.sin(2*φ)+(15*0.00669438**2/256+45*0.00669438**3/1024)*Math.sin(4*φ)-(35*0.00669438**3/3072)*Math.sin(6*φ));return{E:falseEasting+k0*N*(A+(1-T+C)*A**3/6+(5-18*T+T**2+72*C-58*0.00673949675)*A**5/120),N:falseNorthing+k0*(M+N*Math.tan(φ)*(A**2/2+(5-T+9*C+4*C**2)*A**4/24+(61-58*T+T**2+600*C-330*0.00673949675)*A**6/720))};}
-function vidas37ToLatLon(E,N){const M0=0,M=(N-falseNorthing)/k0+M0,μ=M/(R*(1-0.00669438/4-3*0.00669438**2/64-5*0.00669438**3/256)),φ1=μ+(3*0.00669438/2-27*0.00669438**3/32)*Math.sin(2*μ)+(21*0.00669438**2/16-55*0.00669438**3/32)*Math.sin(4*μ)+(151*0.00669438**3/96)*Math.sin(6*μ),C1=0.00673949675*Math.cos(φ1)**2,T1=Math.tan(φ1)**2,N1=R/Math.sqrt(1-0.00669438*Math.sin(φ1)**2),R1=N1*(1-0.00669438)/(1-0.00669438*Math.sin(φ1)**2),D=(E-falseEasting)/(N1*k0),lat=φ1-(N1*Math.tan(φ1)/R1)*(D**2/2-(5+3*T1+10*C1-4*C1**2-9*0.00673949675)*D**4/24+(61+90*T1+298*C1+45*T1**2-252*0.00673949675-3*C1**2)*D**6/720),lon=originLon*Math.PI/180+(D-(1+2*T1+C1)*D**3/6+(5-2*C1+28*T1-3*C1**2+8*0.00673949675+24*T1**2)*D**5/120)/Math.cos(φ1);return{lat:lat*180/Math.PI,lon:lon*180/Math.PI};}
+// Storage
+let points = [];
+let lotLayer = null;
 
-// --- Survey ---
-let surveyPoints=[],startPoint=null;
+// Initialize map at central VIDAS37 coordinates in Manolo Fortich
+const map = L.map('map').setView([8.398673, 124.894305], 17);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Tiles © Esri', maxZoom:19
+}).addTo(map);
 
-function saveStartPoint(){
-  const lat=parseFloat(document.getElementById('startLat').value);
-  const lon=parseFloat(document.getElementById('startLon').value);
-  if(isNaN(lat)||isNaN(lon)){alert("Enter valid start point.");return;}
-  startPoint=latLonToVIDAS37(lat,lon); alert("Start point saved.");
-}
-
-function getAzimuthFromQuadrant(ns,deg,min,ew){
-  let angle=deg+(min||0)/60;
-  let az;
-  if(ns==="N"&&ew==="E") az=angle;
-  else if(ns==="S"&&ew==="E") az=180-angle;
-  else if(ns==="S"&&ew==="W") az=180+angle;
-  else if(ns==="N"&&ew==="W") az=360-angle;
+// Convert quadrant bearing to azimuth
+function quadrantToAzimuth(ns, deg, min, ew){
+  let angle = parseFloat(deg) + parseFloat(min)/60;
+  let az = 0;
+  if(ns==='N' && ew==='E') az = angle;
+  else if(ns==='S' && ew==='E') az = 180 - angle;
+  else if(ns==='S' && ew==='W') az = 180 + angle;
+  else if(ns==='N' && ew==='W') az = 360 - angle;
   return az;
 }
 
+// Forward geodesic calculation
+function destPoint(lat1, lon1, bearing, distance){
+  const R = 6371000; // meters
+  const brng = bearing*Math.PI/180;
+  const φ1 = lat1*Math.PI/180;
+  const λ1 = lon1*Math.PI/180;
+  const δ = distance/R;
+  
+  const φ2 = Math.asin(Math.sin(φ1)*Math.cos(δ) + Math.cos(φ1)*Math.sin(δ)*Math.cos(brng));
+  const λ2 = λ1 + Math.atan2(Math.sin(brng)*Math.sin(δ)*Math.cos(φ1), Math.cos(δ)-Math.sin(φ1)*Math.sin(φ2));
+  
+  return { lat: φ2*180/Math.PI, lon: λ2*180/Math.PI };
+}
+
+// Add point
 function addPoint(){
-  if(!startPoint){alert("Save start point first."); return;}
-  const lineName=document.getElementById('lineName').value.trim();
-  const ns=document.getElementById('ns').value;
-  const ew=document.getElementById('ew').value;
-  const deg=parseFloat(document.getElementById('deg').value);
-  const min=parseFloat(document.getElementById('min').value)||0;
-  let distance=parseFloat(document.getElementById('distance').value);
-
-  if(isNaN(deg)){alert("Enter valid degrees."); return;}
-  if(surveyPoints.length===0) distance=distance||0;
-  else if(isNaN(distance)){alert("Distance required for subsequent points."); return;}
-
-  const az=getAzimuthFromQuadrant(ns,deg,min,ew);
-  surveyPoints.push({lineName,bearing:az,distance});
-  updatePointsList();
+  const ns = document.getElementById('dirNS').value;
+  const ew = document.getElementById('dirEW').value;
+  const deg = document.getElementById('deg').value;
+  const min = document.getElementById('min').value || 0;
+  const dist = parseFloat(document.getElementById('distance').value) || 0;
+  
+  if(deg==='') { alert('Enter degrees'); return; }
+  
+  const az = quadrantToAzimuth(ns, deg, min, ew);
+  const bearingStr = `${ns}${deg}°${min}'${ew}`;
+  
+  points.push({bearing: az, bearingStr: bearingStr, distance: dist});
+  updateList();
+  plotPoints();
 }
 
-function updatePointsList(){
-  const list=document.getElementById('pointsList');
-  document.getElementById('pointCount').innerText=surveyPoints.length;
-  if(surveyPoints.length===0){ list.innerHTML="No points added yet."; return; }
-  list.innerHTML=surveyPoints.map((pt,i)=>`<div class="point-item">P${i+2} - ${pt.lineName}: ${pt.bearing.toFixed(2)}° / ${pt.distance}m</div>`).join('');
+// Update list
+function updateList(){
+  const list = document.getElementById('pointsList');
+  if(points.length===0){ list.innerHTML='No points added yet.'; return; }
+  list.innerHTML = points.map((p,i)=>`${i+1}: ${p.bearingStr} | ${p.distance} m`).join('<br>');
 }
 
-function plotTraverse(){
-  if(!startPoint){alert("Save start point first."); return;}
+// Clear all
+function clearAll(){
+  points = [];
+  updateList();
+  if(lotLayer){ map.removeLayer(lotLayer); lotLayer=null; }
+}
+
+// Plot points on map
+function plotPoints(){
   if(lotLayer) map.removeLayer(lotLayer);
+  if(points.length===0) return;
 
-  let current={...startPoint},corners=[current];
-  for(let pt of surveyPoints){
-    const rad=pt.bearing*Math.PI/180;
-    current={E:current.E+pt.distance*Math.sin(rad),N:current.N+pt.distance*Math.cos(rad)};
-    corners.push({...current});
-  }
-  const latlonCorners=corners.map(p=>vidas37ToLatLon(p.E,p.N));
+  lotLayer = L.layerGroup().addTo(map);
+  let current = {lat:8.398673, lon:124.894305}; // origin
+  let coords = [current];
 
-  lotLayer=L.layerGroup().addTo(map);
-  L.polygon(latlonCorners,{color:'#ff6b00',fillOpacity:0.15}).addTo(lotLayer);
-  latlonCorners.forEach((p,i)=>{
-    L.circleMarker([p.lat,p.lon],{radius:6,color:'#2196F3',fillOpacity:1}).addTo(lotLayer)
-      .bindPopup(`Point ${i+1}<br>Lat: ${p.lat.toFixed(7)}<br>Lon: ${p.lon.toFixed(7)}`);
+  points.forEach((p,i)=>{
+    let next = p.distance>0 ? destPoint(current.lat, current.lon, p.bearing, p.distance) : current;
+    coords.push(next);
+    current = next;
+    
+    L.circleMarker([current.lat, current.lon], {radius:6, color:'#2196F3', fillColor:'#2196F3', fillOpacity:1})
+      .addTo(lotLayer)
+      .bindPopup(`<b>Point ${i+1}</b><br>${p.bearingStr}<br>${p.distance} m`);
   });
-  map.fitBounds(latlonCorners.map(p=>[p.lat,p.lon]),{padding:[50,50]});
+
+  // Draw polygon if more than 2 points
+  if(coords.length>2){
+    L.polygon(coords, {color:'#ff6b00', weight:2, fillOpacity:0.15, fillColor:'#ffaa00'}).addTo(lotLayer);
+    map.fitBounds(coords);
+  } else {
+    map.setView([current.lat, current.lon],17);
+  }
 }
-
-function clearAll(){ surveyPoints=[]; startPoint=null; updatePointsList(); if(lotLayer) map.removeLayer(lotLayer); }
-
-const map=L.map('map').setView([parseFloat(document.getElementById('startLat').value),parseFloat(document.getElementById('startLon').value)],17);
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Tiles © Esri'}).addTo(map);
-let lotLayer=null;
 </script>
+
 </body>
 </html>
