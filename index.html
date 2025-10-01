@@ -3,171 +3,26 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="initial-scale=1.0"/>
-  <title>Land Survey - Point by Point Entry</title>
+  <title>Land Survey - Bearings Only</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
-    * { box-sizing: border-box; }
-    body { margin:0; font-family: Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; }
-    
-    #map { width:100%; flex: 1; min-height: 400px; }
-    
-    .panel { 
-      padding: 15px; 
-      background: #f7f9fb; 
-      border-top: 2px solid #ddd;
-      overflow-y: auto;
-      max-height: 45vh;
-    }
-    
-    .input-section {
-      background: white;
-      padding: 12px;
-      border-radius: 6px;
-      margin-bottom: 15px;
-      border: 1px solid #ddd;
-    }
-    
-    .input-group { 
-      margin-bottom: 10px;
-      display: flex;
-      align-items: center;
-    }
-    .input-group label { 
-      display: inline-block; 
-      width: 120px; 
-      font-weight: bold;
-      font-size: 13px;
-    }
-    .input-group input, .input-group select { 
-      padding: 6px 8px; 
-      border: 1px solid #ccc;
-      border-radius: 3px;
-      font-size: 13px;
-    }
-    .input-group input {
-      flex: 1;
-      max-width: 200px;
-    }
-    .input-group select {
-      margin-right: 5px;
-      background: white;
-    }
-    
-    .bearing-input {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      flex: 1;
-    }
-    .bearing-input input {
-      max-width: 80px;
-    }
-    .bearing-input select {
-      width: 90px;
-      font-weight: bold;
-    }
-    
-    .bearing-mode {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 8px;
-    }
-    .bearing-mode label {
-      display: flex;
-      align-items: center;
-      font-weight: normal;
-      width: auto;
-    }
-    .bearing-mode input[type="radio"] {
-      margin-right: 5px;
-      width: auto;
-    }
-    
-    button { 
-      background: #4CAF50; 
-      color: white; 
-      border: none; 
-      padding: 10px 18px; 
-      cursor: pointer;
-      border-radius: 4px;
-      font-size: 14px;
-      margin-right: 8px;
-      margin-top: 5px;
-    }
-    button:hover { background: #45a049; }
-    
-    .btn-secondary { background: #2196F3; }
-    .btn-secondary:hover { background: #0b7dda; }
-    
-    .btn-danger { background: #f44336; }
-    .btn-danger:hover { background: #da190b; }
-    
-    .btn-warning { background: #ff9800; }
-    .btn-warning:hover { background: #f57c00; }
-    
-    .btn-small { padding: 5px 10px; font-size: 12px; }
-    
-    .points-list {
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      padding: 10px;
-      max-height: 250px;
-      overflow-y: auto;
-    }
-    
-    .point-item {
-      padding: 8px;
-      border-bottom: 1px solid #eee;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: 13px;
-    }
-    
-    .point-item:last-child { border-bottom: none; }
-    .point-item:hover { background: #f5f5f5; }
-    
-    .point-info {
-      font-family: 'Courier New', monospace;
-      flex: 1;
-    }
-    
-    .point-number {
-      font-weight: bold;
-      color: #2196F3;
-      margin-right: 10px;
-    }
-    
-    .results { 
-      margin-top: 15px;
-      padding: 10px;
-      background: white;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      font-family: 'Courier New', monospace;
-      font-size: 11px;
-      white-space: pre-wrap;
-      max-height: 150px;
-      overflow-y: auto;
-    }
-    
-    .info-text { 
-      color: #666; 
-      font-size: 12px; 
-      margin-top: 5px;
-      font-style: italic;
-    }
-    
-    h3 { margin: 10px 0 8px 0; color: #333; font-size: 16px; }
-    
-    .empty-state {
-      text-align: center;
-      color: #999;
-      padding: 20px;
-      font-style: italic;
-    }
+    body { margin:0; font-family: Arial, sans-serif; display:flex; flex-direction:column; height:100vh; }
+    #map { width:100%; flex:1; min-height:400px; }
+    .panel { padding:15px; background:#f7f9fb; border-top:2px solid #ddd; max-height:45vh; overflow-y:auto; }
+    .input-group { margin-bottom:10px; display:flex; align-items:center; }
+    .input-group label { width:120px; font-weight:bold; font-size:13px; }
+    .bearing-input { display:flex; gap:8px; align-items:center; }
+    .bearing-input input { max-width:80px; }
+    .bearing-input select { width:90px; font-weight:bold; }
+    button { background:#4CAF50; color:white; border:none; padding:8px 14px; border-radius:4px; margin-top:5px; cursor:pointer; }
+    button:hover { background:#45a049; }
+    .btn-secondary { background:#2196F3; } .btn-secondary:hover { background:#0b7dda; }
+    .btn-danger { background:#f44336; } .btn-danger:hover { background:#da190b; }
+    .points-list { background:white; border:1px solid #ddd; border-radius:4px; padding:10px; }
+    .point-item { padding:6px; border-bottom:1px solid #eee; font-size:13px; display:flex; justify-content:space-between; }
+    .point-item:last-child { border-bottom:none; }
+    h3 { margin:8px 0; }
   </style>
 </head>
 <body>
@@ -176,396 +31,90 @@
 
 <div class="panel">
   <div class="input-section">
-    <h3>📍 Starting Point (Required)</h3>
-    <div class="input-group">
-      <label>Latitude:</label>
-      <input id="startLat" value="8.398673" type="number" step="any">
-    </div>
-    <div class="input-group">
-      <label>Longitude:</label>
-      <input id="startLon" value="124.894305" type="number" step="any">
-    </div>
-    <button class="btn-secondary btn-small" onclick="saveStartPoint()">💾 Save Start Point</button>
-  </div>
-  
-  <div class="input-section">
-    <h3>➕ Add Point</h3>
-    <p class="info-text">Add points one by one using bearing and distance from previous point</p>
-    
+    <h3>➕ Add Bearing</h3>
     <div class="input-group">
       <label>Line Name:</label>
-      <input id="lineName" value="1-2" placeholder="e.g., 1-2, A-B">
+      <input id="lineName" value="1-2">
     </div>
-    
     <div class="input-group">
-      <label>Bearing Type:</label>
-      <div class="bearing-mode">
-        <label>
-          <input type="radio" name="bearingType" value="quadrant" checked onchange="updateBearingInputs()">
-          Quadrant (N43-02E)
-        </label>
-        <label>
-          <input type="radio" name="bearingType" value="cardinal" onchange="updateBearingInputs()">
-          Cardinal (N, S, E, W)
-        </label>
-      </div>
-    </div>
-    
-    <div class="input-group" id="quadrantInputs">
       <label>Bearing:</label>
       <div class="bearing-input">
         <select id="dirNS">
-          <option value="N">North (N)</option>
-          <option value="S">South (S)</option>
+          <option value="N">N</option>
+          <option value="S">S</option>
         </select>
-        <input id="degrees" type="number" min="0" max="90" step="any" placeholder="Deg" value="">
+        <input id="degrees" type="number" min="0" max="90" placeholder="Deg">
         <span>°</span>
-        <input id="minutes" type="number" min="0" max="59" step="any" placeholder="Min" value="">
+        <input id="minutes" type="number" min="0" max="59" placeholder="Min">
         <span>'</span>
         <select id="dirEW">
-          <option value="E">East (E)</option>
-          <option value="W">West (W)</option>
+          <option value="E">E</option>
+          <option value="W">W</option>
         </select>
       </div>
     </div>
-    
-    <div class="input-group" id="cardinalInputs" style="display:none;">
-      <label>Direction:</label>
-      <div class="bearing-input">
-        <select id="cardinalDir">
-          <option value="N">North (N) - 0°</option>
-          <option value="E">East (E) - 90°</option>
-          <option value="S">South (S) - 180°</option>
-          <option value="W">West (W) - 270°</option>
-        </select>
-      </div>
-    </div>
-    
-    <div class="input-group">
-      <label>Distance (m):</label>
-      <input id="distance" type="number" step="any" placeholder="e.g., 96.005">
-    </div>
-    
-    <div>
-      <button onclick="addPoint()">➕ Add Point</button>
-      <button class="btn-secondary" onclick="plotTraverse()">🗺️ Update Map</button>
-      <button class="btn-warning" onclick="exportData()">📤 Export Data</button>
-      <button class="btn-danger" onclick="clearAll()">🗑️ Clear All</button>
-    </div>
+    <button onclick="addBearing()">➕ Add Bearing</button>
+    <button class="btn-secondary" onclick="exportData()">📤 Export</button>
+    <button class="btn-danger" onclick="clearAll()">🗑️ Clear</button>
   </div>
-  
-  <h3>📋 Points List (<span id="pointCount">0</span>)</h3>
-  <div class="points-list" id="pointsList">
-    <div class="empty-state">No points added yet. Add your first point above.</div>
+
+  <h3>📋 Bearings (<span id="bearingCount">0</span>)</h3>
+  <div class="points-list" id="bearingsList">
+    <div>No bearings added yet.</div>
   </div>
-  
-  <div id="info" class="results" style="display:none;"></div>
 </div>
 
 <script>
-// Storage for points (persisted in memory during session)
-let surveyPoints = [];
-let savedStartPoint = { lat: 8.398673, lon: 124.894305 };
+let bearings = [];
+let basePoint = { lat: 8.398673, lon: 124.894305 }; // fixed reference point
+const map = L.map('map').setView([basePoint.lat, basePoint.lon], 17);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19 }).addTo(map);
+let layerGroup = L.layerGroup().addTo(map);
 
-// Update bearing input visibility
-function updateBearingInputs() {
-  const type = document.querySelector('input[name="bearingType"]:checked').value;
-  document.getElementById('quadrantInputs').style.display = type === 'quadrant' ? 'flex' : 'none';
-  document.getElementById('cardinalInputs').style.display = type === 'cardinal' ? 'flex' : 'none';
-}
-
-// Save start point
-function saveStartPoint() {
-  const lat = parseFloat(document.getElementById('startLat').value);
-  const lon = parseFloat(document.getElementById('startLon').value);
-  
-  if (isNaN(lat) || isNaN(lon)) {
-    alert('Please enter valid coordinates');
-    return;
-  }
-  
-  savedStartPoint = { lat, lon };
-  alert('✓ Start point saved and stored in memory!');
-}
-
-// Get bearing from inputs
-function getBearingFromInputs() {
-  const type = document.querySelector('input[name="bearingType"]:checked').value;
-  
-  if (type === 'cardinal') {
-    const dir = document.getElementById('cardinalDir').value;
-    const bearings = { N: 0, E: 90, S: 180, W: 270 };
-    return { bearing: bearings[dir], bearingStr: dir };
-  } else {
-    const ns = document.getElementById('dirNS').value;
-    const ew = document.getElementById('dirEW').value;
-    const deg = parseFloat(document.getElementById('degrees').value);
-    const min = parseFloat(document.getElementById('minutes').value) || 0;
-    
-    if (isNaN(deg)) return null;
-    
-    let angle = deg + (min / 60);
-    const bearingStr = `${ns}${Math.floor(deg)}°${Math.floor(min).toString().padStart(2, '0')}'${ew}`;
-    
-    // Convert to azimuth (0-360, clockwise from North)
-    let azimuth;
-    if (ns === 'N' && ew === 'E') {
-      azimuth = angle;
-    } else if (ns === 'S' && ew === 'E') {
-      azimuth = 180 - angle;
-    } else if (ns === 'S' && ew === 'W') {
-      azimuth = 180 + angle;
-    } else if (ns === 'N' && ew === 'W') {
-      azimuth = 360 - angle;
-    }
-    
-    return { bearing: azimuth, bearingStr: bearingStr };
-  }
-}
-
-// Forward geodesic calculation
-function destPoint(lat1, lon1, bearing, dist) {
-  const R = 6371000;
-  const brng = bearing * Math.PI / 180;
-  const φ1 = lat1 * Math.PI / 180;
-  const λ1 = lon1 * Math.PI / 180;
-  const δ = dist / R;
-  
-  const φ2 = Math.asin(
-    Math.sin(φ1) * Math.cos(δ) +
-    Math.cos(φ1) * Math.sin(δ) * Math.cos(brng)
-  );
-  
-  const λ2 = λ1 + Math.atan2(
-    Math.sin(brng) * Math.sin(δ) * Math.cos(φ1),
-    Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2)
-  );
-  
-  return { 
-    lat: φ2 * 180 / Math.PI, 
-    lon: λ2 * 180 / Math.PI 
-  };
-}
-
-// Add point to list
-function addPoint() {
+function addBearing() {
   const lineName = document.getElementById('lineName').value.trim();
-  const distStr = document.getElementById('distance').value.trim();
-  
-  if (!lineName || !distStr) {
-    alert('Please fill in line name and distance');
-    return;
-  }
-  
-  const bearingData = getBearingFromInputs();
-  const distance = parseFloat(distStr);
-  
-  if (!bearingData) {
-    alert('Please enter a valid bearing');
-    return;
-  }
-  
-  if (isNaN(distance)) {
-    alert('Invalid distance value');
-    return;
-  }
-  
-  // Store point in memory
-  surveyPoints.push({
-    lineName: lineName,
-    bearingStr: bearingData.bearingStr,
-    bearing: bearingData.bearing,
-    distance: distance
-  });
-  
-  updatePointsList();
-  
-  // Auto increment line name
-  const match = lineName.match(/(\d+)-(\d+)/);
-  if (match) {
-    const next = parseInt(match[2]) + 1;
-    document.getElementById('lineName').value = `${match[2]}-${next}`;
-  }
-  
-  // Clear inputs
-  const type = document.querySelector('input[name="bearingType"]:checked').value;
-  if (type === 'quadrant') {
-    document.getElementById('degrees').value = '';
-    document.getElementById('minutes').value = '';
-    document.getElementById('degrees').focus();
-  }
-  document.getElementById('distance').value = '';
-  
-  // Auto update map
-  plotTraverse();
+  const deg = parseFloat(document.getElementById('degrees').value);
+  const min = parseFloat(document.getElementById('minutes').value) || 0;
+  const ns = document.getElementById('dirNS').value;
+  const ew = document.getElementById('dirEW').value;
+
+  if (isNaN(deg)) { alert("Enter degrees"); return; }
+
+  let angle = deg + min/60;
+  let azimuth;
+  if (ns==="N" && ew==="E") azimuth = angle;
+  if (ns==="S" && ew==="E") azimuth = 180 - angle;
+  if (ns==="S" && ew==="W") azimuth = 180 + angle;
+  if (ns==="N" && ew==="W") azimuth = 360 - angle;
+
+  bearings.push({ lineName, bearingStr:`${ns}${deg}°${min}'${ew}`, azimuth });
+  updateList();
 }
 
-// Update points list display
-function updatePointsList() {
-  const list = document.getElementById('pointsList');
-  document.getElementById('pointCount').innerText = surveyPoints.length;
-  
-  if (surveyPoints.length === 0) {
-    list.innerHTML = '<div class="empty-state">No points added yet. Add your first point above.</div>';
-    return;
-  }
-  
-  list.innerHTML = surveyPoints.map((pt, i) => `
+function updateList() {
+  document.getElementById("bearingCount").innerText = bearings.length;
+  const list = document.getElementById("bearingsList");
+  if (bearings.length===0) { list.innerHTML = "<div>No bearings added yet.</div>"; return; }
+  list.innerHTML = bearings.map((b,i)=>`
     <div class="point-item">
-      <span class="point-number">P${i + 2}</span>
-      <span class="point-info">${pt.lineName}: ${pt.bearingStr} (${pt.bearing.toFixed(2)}°) → ${pt.distance}m</span>
-      <button class="btn-danger btn-small" onclick="removePoint(${i})">✕</button>
+      <span>${b.lineName}</span>
+      <span>${b.bearingStr} (${b.azimuth.toFixed(2)}°)</span>
     </div>
-  `).join('');
+  `).join("");
 }
 
-// Remove point
-function removePoint(index) {
-  if (confirm('Remove this point?')) {
-    surveyPoints.splice(index, 1);
-    updatePointsList();
-    plotTraverse();
-  }
-}
-
-// Clear all
 function clearAll() {
-  if (surveyPoints.length > 0 && !confirm('Clear all points? This cannot be undone.')) {
-    return;
-  }
-  surveyPoints = [];
-  updatePointsList();
-  clearMap();
-  document.getElementById('info').style.display = 'none';
+  bearings=[]; updateList();
 }
 
-// Export data
 function exportData() {
-  if (!savedStartPoint || surveyPoints.length === 0) {
-    alert('No data to export. Add some points first.');
-    return;
-  }
-  
-  let output = `START POINT:\nLatitude: ${savedStartPoint.lat}\nLongitude: ${savedStartPoint.lon}\n\n`;
-  output += `SURVEY POINTS (${surveyPoints.length}):\n`;
-  output += `Line\tBearing\t\tAzimuth\tDistance(m)\n`;
-  output += `${'─'.repeat(60)}\n`;
-  
-  surveyPoints.forEach(pt => {
-    output += `${pt.lineName}\t${pt.bearingStr}\t${pt.bearing.toFixed(2)}°\t${pt.distance}\n`;
+  if (bearings.length===0) { alert("No data to export"); return; }
+  let txt = `Base Point: ${basePoint.lat}, ${basePoint.lon}\nBearings:\n`;
+  bearings.forEach(b => {
+    txt += `${b.lineName}\t${b.bearingStr}\t${b.azimuth.toFixed(2)}°\n`;
   });
-  
-  alert('Data stored in memory:\n\n' + output);
-  console.log('Survey Data:', { startPoint: savedStartPoint, points: surveyPoints });
+  alert(txt);
 }
-
-// Initialize map
-const map = L.map('map').setView([savedStartPoint.lat, savedStartPoint.lon], 17);
-
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  attribution: 'Tiles © Esri',
-  maxZoom: 19
-}).addTo(map);
-
-let lotLayer = null;
-
-function plotTraverse() {
-  if (lotLayer) map.removeLayer(lotLayer);
-  
-  const startLat = savedStartPoint.lat;
-  const startLon = savedStartPoint.lon;
-  
-  if (surveyPoints.length === 0) {
-    document.getElementById('info').style.display = 'none';
-    return;
-  }
-  
-  let current = { lat: startLat, lon: startLon };
-  let corners = [current];
-  let infoText = `Point 1 (Start): ${startLat.toFixed(7)}, ${startLon.toFixed(7)}\n`;
-  infoText += '─'.repeat(60) + '\n';
-  
-  surveyPoints.forEach((pt, i) => {
-    current = destPoint(current.lat, current.lon, pt.bearing, pt.distance);
-    corners.push(current);
-    
-    infoText += `Point ${i + 2} (${pt.lineName}):\n`;
-    infoText += `  Bearing: ${pt.bearingStr} → ${pt.bearing.toFixed(2)}°\n`;
-    infoText += `  Distance: ${pt.distance.toFixed(2)}m\n`;
-    infoText += `  GPS: ${current.lat.toFixed(7)}, ${current.lon.toFixed(7)}\n\n`;
-  });
-  
-  const area = calculateArea(corners);
-  infoText += '─'.repeat(60) + '\n';
-  infoText += `Total Points: ${corners.length}\n`;
-  infoText += `Approximate Area: ${area.toFixed(2)} sq.m (${(area / 10000).toFixed(4)} hectares)\n`;
-  
-  document.getElementById('info').innerText = infoText;
-  document.getElementById('info').style.display = 'block';
-  
-  const polyCoords = corners.map(p => [p.lat, p.lon]);
-  lotLayer = L.layerGroup().addTo(map);
-  
-  L.polygon(polyCoords, { 
-    color: '#ff6b00', 
-    weight: 3, 
-    fillOpacity: 0.15,
-    fillColor: '#ffaa00'
-  }).addTo(lotLayer).bindPopup(`<b>Land Survey</b><br>Points: ${corners.length}<br>Area: ${area.toFixed(2)} sq.m`);
-  
-  corners.forEach((pt, i) => {
-    L.circleMarker([pt.lat, pt.lon], {
-      radius: 6, 
-      color: '#fff', 
-      fillColor: i === 0 ? '#4CAF50' : '#2196F3', 
-      fillOpacity: 1,
-      weight: 2
-    }).addTo(lotLayer).bindPopup(`<b>Point ${i + 1}</b><br>Lat: ${pt.lat.toFixed(7)}<br>Lon: ${pt.lon.toFixed(7)}`);
-    
-    L.marker([pt.lat, pt.lon], {
-      icon: L.divIcon({
-        className: 'label',
-        html: `<div style="background:rgba(255,255,255,0.9);padding:2px 6px;border-radius:3px;font-size:11px;font-weight:bold;border:1px solid #ccc;">P${i + 1}</div>`,
-        iconSize: [30, 20]
-      })
-    }).addTo(lotLayer);
-  });
-  
-  map.fitBounds(polyCoords, { padding: [50, 50] });
-}
-
-function calculateArea(corners) {
-  if (corners.length < 3) return 0;
-  
-  let area = 0;
-  for (let i = 0; i < corners.length; i++) {
-    const j = (i + 1) % corners.length;
-    const lat1 = corners[i].lat * Math.PI / 180;
-    const lat2 = corners[j].lat * Math.PI / 180;
-    const lon1 = corners[i].lon * Math.PI / 180;
-    const lon2 = corners[j].lon * Math.PI / 180;
-    
-    area += (lon2 - lon1) * (2 + Math.sin(lat1) + Math.sin(lat2));
-  }
-  
-  area = Math.abs(area * 6371000 * 6371000 / 2);
-  return area;
-}
-
-function clearMap() {
-  if (lotLayer) {
-    map.removeLayer(lotLayer);
-    lotLayer = null;
-  }
-}
-
-// Enter key support
-document.getElementById('distance').addEventListener('keypress', function(e) {
-  if (e.key === 'Enter') {
-    addPoint();
-  }
-});
 </script>
-
 </body>
 </html>
