@@ -40,7 +40,7 @@
     </div>
 
     <div class="input-group">
-      <label>Bearing Type:</label>
+      <label>Bearing:</label>
       <select id="bearingType">
         <option value="N">North (N)</option>
         <option value="E">East (E)</option>
@@ -69,13 +69,13 @@
 
 <script>
 let surveyPoints = [];
-const map = L.map('map').setView([8.398673, 124.894305], 17);
+let lotLayer = null;
 
+// Initialize satellite map
+const map = L.map('map').setView([8.398673, 124.894305], 17);
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
   attribution: 'Tiles © Esri', maxZoom: 19
 }).addTo(map);
-
-let lotLayer = null;
 
 // Enable distance only after first point
 function updateDistanceInput() {
@@ -84,7 +84,7 @@ function updateDistanceInput() {
 }
 updateDistanceInput();
 
-// Convert bearing to azimuth in degrees (N=0, clockwise)
+// Convert bearing to azimuth
 function bearingToAzimuth(bearing) {
   switch(bearing) {
     case 'N': return 0;
@@ -95,14 +95,14 @@ function bearingToAzimuth(bearing) {
   }
 }
 
-// Forward geodesic (dest point from lat,lon,bearing,distance)
+// Forward geodesic calculation
 function destPoint(lat1, lon1, azimuth, dist) {
-  const R = 6371000; // meters
+  const R = 6371000;
   const brng = azimuth * Math.PI/180;
   const φ1 = lat1 * Math.PI/180;
   const λ1 = lon1 * Math.PI/180;
   const δ = dist / R;
-  const φ2 = Math.asin(Math.sin(φ1)*Math.cos(δ) + Math.cos(φ1)*Math.sin(δ)*Math.cos(brng));
+  const φ2 = Math.asin(Math.sin(φ1)*Math.cos(δ)+Math.cos(φ1)*Math.sin(δ)*Math.cos(brng));
   const λ2 = λ1 + Math.atan2(Math.sin(brng)*Math.sin(δ)*Math.cos(φ1), Math.cos(δ)-Math.sin(φ1)*Math.sin(φ2));
   return { lat: φ2*180/Math.PI, lon: λ2*180/Math.PI };
 }
@@ -111,20 +111,19 @@ function destPoint(lat1, lon1, azimuth, dist) {
 function addPoint() {
   const lineName = document.getElementById('lineName').value.trim();
   const bearing = document.getElementById('bearingType').value;
-  const distanceInput = document.getElementById('distance');
-  let distance = parseFloat(distanceInput.value);
+  let distance = parseFloat(document.getElementById('distance').value);
 
   if(!lineName) { alert('Enter line name'); return; }
 
   // First point ignores distance
-  if(surveyPoints.length === 0) distance = 50; // just for visualization
+  if(surveyPoints.length === 0) distance = 0;
   else if(isNaN(distance)) { alert('Enter valid distance'); return; }
 
   surveyPoints.push({ lineName, bearing, azimuth: bearingToAzimuth(bearing), distance });
 
   updatePointsList();
   updateDistanceInput();
-  distanceInput.value = '';
+  document.getElementById('distance').value = '';
   plotTraverse();
 
   // Auto increment line name
@@ -155,7 +154,7 @@ function removePoint(i) { surveyPoints.splice(i,1); updatePointsList(); updateDi
 // Clear all
 function clearAll() { surveyPoints=[]; updatePointsList(); updateDistanceInput(); if(lotLayer) map.removeLayer(lotLayer); lotLayer=null; }
 
-// Plot points on map
+// Plot points
 function plotTraverse() {
   if(lotLayer) map.removeLayer(lotLayer);
   if(surveyPoints.length===0) return;
@@ -165,16 +164,18 @@ function plotTraverse() {
   lotLayer = L.layerGroup().addTo(map);
 
   surveyPoints.forEach(pt=>{
-    current = destPoint(current.lat, current.lon, pt.azimuth, pt.distance);
+    if(pt.distance>0) current = destPoint(current.lat,current.lon,pt.azimuth,pt.distance);
     corners.push(current);
   });
 
   const polyCoords = corners.map(p=>[p.lat,p.lon]);
-  L.polygon(polyCoords, { color:'#ff6b00', weight:3, fillOpacity:0.15 }).addTo(lotLayer);
+  L.polygon(polyCoords,{color:'#ff6b00',weight:3,fillOpacity:0.15}).addTo(lotLayer);
 
   corners.forEach((pt,i)=>{
-    L.circleMarker([pt.lat,pt.lon], { radius:6, color:'#fff', fillColor:i===0?'#4CAF50':'#2196F3', fillOpacity:1, weight:2 }).addTo(lotLayer);
-    L.marker([pt.lat,pt.lon], { icon:L.divIcon({ className:'label', html:`<div style="background:rgba(255,255,255,0.9);padding:2px 6px;border-radius:3px;font-size:11px;font-weight:bold;border:1px solid #ccc;">P${i+1}</div>`, iconSize:[30,20] })}).addTo(lotLayer);
+    L.circleMarker([pt.lat,pt.lon],{radius:6,color:'#fff',fillColor:i===0?'#4CAF50':'#2196F3',fillOpacity:1,weight:2}).addTo(lotLayer);
+    L.marker([pt.lat,pt.lon],{
+      icon:L.divIcon({className:'label',html:`<div style="background:rgba(255,255,255,0.9);padding:2px 6px;border-radius:3px;font-size:11px;font-weight:bold;border:1px solid #ccc;">P${i+1}</div>`,iconSize:[30,20]})
+    }).addTo(lotLayer);
   });
 
   map.fitBounds(polyCoords,{padding:[50,50]});
