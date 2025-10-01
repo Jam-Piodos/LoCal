@@ -3,200 +3,313 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="initial-scale=1.0"/>
-  <title>Affine-align Local Survey → GPS (Lot 4 corners)</title>
-
+  <title>Land Survey - Bearing + Distance to GPS</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
   <style>
-    body { margin:0; font-family: Arial, sans-serif; }
-    #map { width:100%; height:78vh; }
-    .panel { padding:10px; background:#f7f9fb; border-top:1px solid #ddd; }
-    .panel .small { color:#444; font-size:13px; }
-    .res { font-family:monospace; white-space:pre; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Arial, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+    
+    #map { width:100%; flex: 1; min-height: 400px; }
+    
+    .panel { 
+      padding: 15px; 
+      background: #f7f9fb; 
+      border-top: 2px solid #ddd;
+      overflow-y: auto;
+      max-height: 40vh;
+    }
+    
+    .input-group { margin-bottom: 12px; }
+    .input-group label { 
+      display: inline-block; 
+      width: 100px; 
+      font-weight: bold;
+      font-size: 13px;
+    }
+    .input-group input { 
+      padding: 6px; 
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      width: 150px;
+    }
+    
+    textarea { 
+      width: 100%; 
+      padding: 8px; 
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+    }
+    
+    button { 
+      background: #4CAF50; 
+      color: white; 
+      border: none; 
+      padding: 10px 20px; 
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 14px;
+      margin-right: 8px;
+    }
+    button:hover { background: #45a049; }
+    
+    .btn-secondary { background: #2196F3; }
+    .btn-secondary:hover { background: #0b7dda; }
+    
+    .results { 
+      margin-top: 15px;
+      padding: 10px;
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      white-space: pre-wrap;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
+    .info-text { 
+      color: #666; 
+      font-size: 12px; 
+      margin-top: 5px;
+      font-style: italic;
+    }
+    
+    h3 { margin: 10px 0; color: #333; }
   </style>
 </head>
 <body>
 
 <div id="map"></div>
+
 <div class="panel">
-  <div class="small">Affine fit residuals (lat, lon) — RMS and per-point error (meters approx):</div>
-  <div id="info" class="res"></div>
+  <h3>📍 Starting Point (GPS Coordinates)</h3>
+  <div class="input-group">
+    <label>Latitude:</label>
+    <input id="startLat" value="8.398673" type="number" step="any">
+  </div>
+  <div class="input-group">
+    <label>Longitude:</label>
+    <input id="startLon" value="124.894305" type="number" step="any">
+  </div>
+  
+  <h3>📐 Survey Data (Bearing & Distance)</h3>
+  <p class="info-text">Format: Line, Bearing, Distance(m), Northing, Easting (one per line)<br>
+  Example: 1-2, N43-02E, 96.005, 20000.000, 20000.000</p>
+  
+  <textarea id="traverseInput" rows="6">1-2, N43-02E, 96.005, 20000.000, 20000.000
+2-3, S41-22W, 340.50, 23423.240, 23198.620
+2-3, S41-22W, 329.80, 23311.940, 23013.590
+4-1, N39-11E, 285.50, 22021.940, 23018.230</textarea>
+  
+  <div style="margin-top: 10px;">
+    <button onclick="plotTraverse()">🗺️ Plot on Map</button>
+    <button class="btn-secondary" onclick="clearMap()">🗑️ Clear</button>
+    <button class="btn-secondary" onclick="loadSample()">📋 Load Sample</button>
+  </div>
+  
+  <div id="info" class="results"></div>
 </div>
 
 <script>
-/*
-  1) Replace localPoints with your local Easting/Northing (meters) in order 1->2->3->4.
-  2) gpsPoints are the target GPS you supplied for points 1..4.
-  3) The script computes affine parameters mapping local->(lat,lon).
-  4) It applies the transform to local points, plots polygon and markers, and shows residuals.
-*/
-
-// --- Local survey points (Easting, Northing) in same order as GPS points 1..4
-// IMPORTANT: keep ordering consistent with gpsPoints below
-const localPoints = [
-  { id: 1, E: 23198.620, N: 23425.240 }, // local point 1
-  { id: 2, E: 23519.570, N: 23111.940 }, // local point 2
-  { id: 3, E: 23301.590, N: 23064.430 }, // local point 3
-  { id: 4, E: 23018.230, N: 23203.940 }  // local point 4
-];
-
-// --- GPS targets you provided (lat, lon) for points 1..4
-const gpsPoints = [
-  { id:1, lat: 8.398673, lon: 124.894305 },
-  { id:2, lat: 8.398230, lon: 124.895121 },
-  { id:3, lat: 8.397676, lon: 124.894605 },
-  { id:4, lat: 8.398102, lon: 124.893790 }
-];
-
-// ---- Build linear system for affine: lat = a*E + b*N + c ; lon = d*E + e*N + f
-// We'll solve for vector x = [a b c d e f] using least squares (AtA x = At b)
-function solveAffine(localPts, gpsPts) {
-  // Build matrices A (8x6) and b (8x1): two equations per point (lat and lon)
-  // For each point: [E N 1 0 0 0] * x = lat ; [0 0 0 E N 1] * x = lon
-  const rows = localPts.length * 2;
-  const cols = 6;
-  // initialize AtA (6x6) and Atb (6x1) to zero
-  let AtA = Array.from({length:cols}, ()=>Array(cols).fill(0));
-  let Atb = Array(cols).fill(0);
-
-  for (let i=0; i<localPts.length; i++) {
-    const E = localPts[i].E;
-    const N = localPts[i].N;
-    const lat = gpsPts[i].lat;
-    const lon = gpsPts[i].lon;
-
-    // row1 = [E N 1 0 0 0], b1 = lat
-    const r1 = [E, N, 1, 0, 0, 0];
-    // row2 = [0 0 0 E N 1], b2 = lon
-    const r2 = [0,0,0,E, N, 1];
-
-    // Accumulate AtA += r^T * r ; Atb += r^T * b
-    for (let p=0;p<cols;p++){
-      for (let q=0;q<cols;q++){
-        AtA[p][q] += r1[p]*r1[q] + r2[p]*r2[q];
-      }
-      Atb[p] += r1[p]*lat + r2[p]*lon;
-    }
+// Parse bearing notation like "N43-02E" or "S41-22W" to decimal degrees
+function parseBearing(bearingStr) {
+  bearingStr = bearingStr.trim().toUpperCase();
+  
+  // Handle decimal degrees directly
+  if (!isNaN(bearingStr)) {
+    return parseFloat(bearingStr);
   }
-
-  // Solve linear system AtA * x = Atb via Gaussian elimination (6x6)
-  // convert to augmented matrix
-  let M = AtA.map((row,i) => row.concat([Atb[i]]));
-
-  // Gaussian elimination
-  const n = M.length;
-  for (let i=0;i<n;i++){
-    // pivot
-    let maxRow = i;
-    for (let k=i+1;k<n;k++){
-      if (Math.abs(M[k][i]) > Math.abs(M[maxRow][i])) maxRow = k;
-    }
-    // swap
-    [M[i], M[maxRow]] = [M[maxRow], M[i]];
-    // singular?
-    if (Math.abs(M[i][i]) < 1e-12) throw new Error("Singular system (points maybe collinear)");
-    // normalize
-    const piv = M[i][i];
-    for (let j=i;j<=n;j++) M[i][j] /= piv;
-    // eliminate
-    for (let r=0;r<n;r++){
-      if (r===i) continue;
-      const factor = M[r][i];
-      for (let c=i;c<=n;c++) M[r][c] -= factor*M[i][c];
-    }
+  
+  // Parse N/S/E/W notation like N43-02E
+  const match = bearingStr.match(/([NS])(\d+)-?(\d+)?([EW])?/);
+  if (!match) return null;
+  
+  const [, ns, deg, min, ew] = match;
+  let angle = parseFloat(deg);
+  if (min) angle += parseFloat(min) / 60;
+  
+  // Convert to azimuth (0-360, clockwise from North)
+  if (ns === 'N' && ew === 'E') {
+    return angle;
+  } else if (ns === 'S' && ew === 'E') {
+    return 180 - angle;
+  } else if (ns === 'S' && ew === 'W') {
+    return 180 + angle;
+  } else if (ns === 'N' && ew === 'W') {
+    return 360 - angle;
+  } else if (ns === 'N' && !ew) {
+    return 0;
+  } else if (ns === 'S' && !ew) {
+    return 180;
   }
-  // solution
-  const x = M.map(row => row[n]);
-  return x; // [a,b,c,d,e,f]
+  
+  return null;
 }
 
-// apply affine to local point -> [lat, lon]
-function applyAffine(x, E, N) {
-  const a = x[0], b = x[1], c = x[2], d = x[3], e = x[4], f = x[5];
-  const lat = a*E + b*N + c;
-  const lon = d*E + e*N + f;
-  return { lat, lon };
+// Forward geodesic calculation
+function destPoint(lat1, lon1, bearing, dist) {
+  const R = 6371000; // Earth radius in meters
+  const brng = bearing * Math.PI / 180;
+  const φ1 = lat1 * Math.PI / 180;
+  const λ1 = lon1 * Math.PI / 180;
+  const δ = dist / R;
+  
+  const φ2 = Math.asin(
+    Math.sin(φ1) * Math.cos(δ) +
+    Math.cos(φ1) * Math.sin(δ) * Math.cos(brng)
+  );
+  
+  const λ2 = λ1 + Math.atan2(
+    Math.sin(brng) * Math.sin(δ) * Math.cos(φ1),
+    Math.cos(δ) - Math.sin(φ1) * Math.sin(φ2)
+  );
+  
+  return { 
+    lat: φ2 * 180 / Math.PI, 
+    lon: λ2 * 180 / Math.PI 
+  };
 }
 
-// compute transform
-let affineX;
-try {
-  affineX = solveAffine(localPoints, gpsPoints);
-} catch (err) {
-  alert("Affine solve failed: " + err.message);
-  throw err;
-}
+// Initialize Leaflet map
+const map = L.map('map').setView([8.398673, 124.894305], 17);
 
-// apply transform to localPoints (and compute residuals)
-const transformed = [];
-let sumSq = 0;
-const metersPerDegLat = 111320; // rough
-const meanLat = gpsPoints.reduce((s,p)=>s+p.lat,0)/gpsPoints.length;
-const metersPerDegLon = 111320 * Math.cos(meanLat*Math.PI/180);
-
-let infoText = "";
-for (let i=0;i<localPoints.length;i++){
-  const pt = localPoints[i];
-  const got = applyAffine(affineX, pt.E, pt.N);
-  transformed.push(got);
-  // residual in degrees
-  const dLat = got.lat - gpsPoints[i].lat;
-  const dLon = got.lon - gpsPoints[i].lon;
-  // residual in meters approx
-  const resMeters = Math.hypot(dLat*metersPerDegLat, dLon*metersPerDegLon);
-  sumSq += resMeters*resMeters;
-  infoText += `P${pt.id}: target(${gpsPoints[i].lat.toFixed(6)}, ${gpsPoints[i].lon.toFixed(6)}) → transformed(${got.lat.toFixed(6)}, ${got.lon.toFixed(6)})  error ≈ ${resMeters.toFixed(2)} m\n`;
-}
-const rms = Math.sqrt(sumSq / localPoints.length);
-infoText += `\nRMS error ≈ ${rms.toFixed(2)} m\n\nAffine parameters:\n`;
-infoText += `a=${affineX[0].toExponential(6)}, b=${affineX[1].toExponential(6)}, c=${affineX[2].toExponential(6)}\n`;
-infoText += `d=${affineX[3].toExponential(6)}, e=${affineX[4].toExponential(6)}, f=${affineX[5].toExponential(6)}\n`;
-
-document.getElementById('info').innerText = infoText;
-
-// --- Initialize map centered near average of transformed points ---
-const avgLat = transformed.reduce((s,p)=>s+p.lat,0)/transformed.length;
-const avgLon = transformed.reduce((s,p)=>s+p.lon,0)/transformed.length;
-
-const map = L.map('map', {
-  minZoom: 14,
-  maxZoom: 19
-}).setView([avgLat, avgLon], 16);
-
-// Satellite basemap
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  attribution: 'Tiles © Esri'
+  attribution: 'Tiles © Esri',
+  maxZoom: 19
 }).addTo(map);
 
-// show the target gps points (green) and transformed local (blue)
-const targetLayer = L.layerGroup().addTo(map);
-const transLayer = L.layerGroup().addTo(map);
+let lotLayer = null;
 
-// polygon from transformed points (close polygon)
-const polyCoords = transformed.map(p => [p.lat, p.lon]);
-polyCoords.push(polyCoords[0]); // close
-
-// polygon style
-L.polygon(polyCoords, { color: 'orange', weight: 2, fillOpacity: 0.15 }).addTo(map).bindPopup("Transformed Lot");
-
-// Add transformed markers
-for (let i=0;i<transformed.length;i++){
-  L.circleMarker([transformed[i].lat, transformed[i].lon], {
-    radius:6, color:'#1f78b4', fillColor:'#1f78b4', fillOpacity:0.9
-  }).addTo(transLayer).bindPopup(`Trans P${localPoints[i].id}`);
+function plotTraverse() {
+  if (lotLayer) map.removeLayer(lotLayer);
+  
+  const startLat = parseFloat(document.getElementById('startLat').value);
+  const startLon = parseFloat(document.getElementById('startLon').value);
+  
+  if (isNaN(startLat) || isNaN(startLon)) {
+    alert('Please enter valid starting coordinates');
+    return;
+  }
+  
+  const inputLines = document.getElementById('traverseInput').value.trim().split("\n");
+  let current = { lat: startLat, lon: startLon };
+  let corners = [current];
+  let infoText = `Point 1 (Start): ${startLat.toFixed(7)}, ${startLon.toFixed(7)}\n`;
+  infoText += '─'.repeat(60) + '\n';
+  
+  for (let i = 0; i < inputLines.length; i++) {
+    const line = inputLines[i].trim();
+    if (!line) continue;
+    
+    // Split by comma
+    const parts = line.split(',').map(p => p.trim());
+    if (parts.length < 3) continue;
+    
+    const lineName = parts[0];
+    const bearingStr = parts[1];
+    const distStr = parts[2];
+    
+    const bearing = parseBearing(bearingStr);
+    const dist = parseFloat(distStr);
+    
+    if (bearing === null || isNaN(dist)) {
+      infoText += `⚠️  Line ${lineName}: Invalid format\n`;
+      continue;
+    }
+    
+    current = destPoint(current.lat, current.lon, bearing, dist);
+    corners.push(current);
+    
+    infoText += `Point ${i + 2} (${lineName}):\n`;
+    infoText += `  Bearing: ${bearingStr} → ${bearing.toFixed(2)}°\n`;
+    infoText += `  Distance: ${dist.toFixed(2)}m\n`;
+    infoText += `  GPS: ${current.lat.toFixed(7)}, ${current.lon.toFixed(7)}\n\n`;
+  }
+  
+  // Calculate area (approximate)
+  const area = calculateArea(corners);
+  infoText += '─'.repeat(60) + '\n';
+  infoText += `Total Points: ${corners.length}\n`;
+  infoText += `Approximate Area: ${area.toFixed(2)} sq.m (${(area / 10000).toFixed(4)} hectares)\n`;
+  
+  document.getElementById('info').innerText = infoText;
+  
+  // Draw polygon on map
+  const polyCoords = corners.map(p => [p.lat, p.lon]);
+  lotLayer = L.layerGroup().addTo(map);
+  
+  L.polygon(polyCoords, { 
+    color: '#ff6b00', 
+    weight: 3, 
+    fillOpacity: 0.15,
+    fillColor: '#ffaa00'
+  }).addTo(lotLayer).bindPopup(`<b>Land Survey</b><br>Area: ${area.toFixed(2)} sq.m`);
+  
+  // Add corner markers
+  corners.forEach((pt, i) => {
+    L.circleMarker([pt.lat, pt.lon], {
+      radius: 6, 
+      color: '#fff', 
+      fillColor: i === 0 ? '#4CAF50' : '#2196F3', 
+      fillOpacity: 1,
+      weight: 2
+    }).addTo(lotLayer).bindPopup(`<b>Point ${i + 1}</b><br>${pt.lat.toFixed(7)}, ${pt.lon.toFixed(7)}`);
+    
+    // Add labels
+    L.marker([pt.lat, pt.lon], {
+      icon: L.divIcon({
+        className: 'label',
+        html: `<div style="background:rgba(255,255,255,0.8);padding:2px 5px;border-radius:3px;font-size:11px;font-weight:bold;">P${i + 1}</div>`,
+        iconSize: [30, 20]
+      })
+    }).addTo(lotLayer);
+  });
+  
+  map.fitBounds(polyCoords, { padding: [50, 50] });
 }
 
-// Add target GPS markers for comparison
-for (let i=0;i<gpsPoints.length;i++){
-  L.circleMarker([gpsPoints[i].lat, gpsPoints[i].lon], {
-    radius:6, color:'#33a02c', fillColor:'#a6f0a6', fillOpacity:0.9
-  }).addTo(targetLayer).bindPopup(`Target P${gpsPoints[i].id}`);
+function calculateArea(corners) {
+  if (corners.length < 3) return 0;
+  
+  // Using spherical excess formula (approximate)
+  let area = 0;
+  for (let i = 0; i < corners.length; i++) {
+    const j = (i + 1) % corners.length;
+    const lat1 = corners[i].lat * Math.PI / 180;
+    const lat2 = corners[j].lat * Math.PI / 180;
+    const lon1 = corners[i].lon * Math.PI / 180;
+    const lon2 = corners[j].lon * Math.PI / 180;
+    
+    area += (lon2 - lon1) * (2 + Math.sin(lat1) + Math.sin(lat2));
+  }
+  
+  area = Math.abs(area * 6371000 * 6371000 / 2);
+  return area;
 }
 
-// Fit view to polygon
-map.fitBounds(polyCoords);
+function clearMap() {
+  if (lotLayer) {
+    map.removeLayer(lotLayer);
+    lotLayer = null;
+  }
+  document.getElementById('info').innerText = '';
+}
 
+function loadSample() {
+  document.getElementById('traverseInput').value = `1-2, N43-02E, 96.005, 20000.000, 20000.000
+2-3, S41-22W, 340.50, 23423.240, 23198.620
+3-4, S41-22W, 329.80, 23311.940, 23013.590
+4-1, N39-11E, 285.50, 22021.940, 23018.230`;
+  plotTraverse();
+}
+
+// Auto-plot on load
+plotTraverse();
 </script>
+
 </body>
 </html>
